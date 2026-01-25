@@ -27,16 +27,7 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
   const [showManageRates, setShowManageRates] = useState(false);
   const [showSettlement, setShowSettlement] = useState(false);
   const [showChart, setShowChart] = useState(false);
-  // 加上監聽器
-useEffect(() => {
-  const unsubExpenses = dbService.subscribeExpenses((data) => setExpenses(data));
-  const unsubArchived = dbService.subscribeArchivedSettlements((data) => setArchivedSettlements(data));
 
-  return () => {
-    unsubExpenses();
-    unsubArchived();
-  };
-}, []);
   
   const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>({});
 
@@ -315,11 +306,20 @@ const toggleClearedSplit = async (expenseId: string, memberId: string) => {
       console.error("更新結清狀態失敗:", error);
     }
   };
-  useEffect(() => {
-  const unsubExpenses = dbService.subscribeExpenses(setExpenses);
-  const unsubArchived = dbService.subscribeArchivedSettlements(setArchivedSettlements);
-  
-  // 增加這一段監聽
+
+useEffect(() => {
+  // 監聽支出
+  const unsubExpenses = dbService.subscribeExpenses((data) => {
+    console.log("收到雲端支出更新:", data);
+    setExpenses(data);
+  });
+
+  // 監聽結算
+  const unsubArchived = dbService.subscribeArchivedSettlements((data) => {
+    setArchivedSettlements(data);
+  });
+
+  // 監聽勾選狀態 (如果 dbService 有支援)
   const unsubCleared = dbService.subscribeClearedSplits?.((data) => {
     if (data) setClearedSplits(data);
   });
@@ -330,7 +330,6 @@ const toggleClearedSplit = async (expenseId: string, memberId: string) => {
     unsubCleared?.();
   };
 }, []);
-
   const toggleSplitMember = (id: string) => {
     if (formData.splitWith.includes(id)) {
       setFormData({ ...formData, splitWith: formData.splitWith.filter(i => i !== id) });
@@ -367,7 +366,7 @@ const toggleClearedSplit = async (expenseId: string, memberId: string) => {
   } catch (error) {
     console.error("儲存失敗:", error);
     alert("雲端同步失敗，請檢查網路連線");
-};
+}
 };
 
   const handleUpdateExpense = async () => {
