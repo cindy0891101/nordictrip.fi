@@ -1,18 +1,15 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { NordicCard, Modal, NordicButton } from '../components/Shared';
 import { Booking, BookingType } from '../types';
+import { dbService } from '../firebaseService';
 
 interface BookingsViewProps {
   isEditMode?: boolean;
 }
 
 const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('nordic_bookings');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  // 1. 初始化狀態為空，改由 Firebase 驅動
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeTab, setActiveTab] = useState<BookingType>('flight');
   const [expandedFlightId, setExpandedFlightId] = useState<string | null>(null);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
@@ -20,9 +17,13 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
   const [editingBooking, setEditingBooking] = useState<Partial<Booking> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 2. 訂閱雲端資料庫（達成即時跨裝置同步）
   useEffect(() => {
-    localStorage.setItem('nordic_bookings', JSON.stringify(bookings));
-  }, [bookings]);
+    const unsubscribe = dbService.subscribeBookings((cloudData) => {
+      setBookings(cloudData);
+    });
+    return () => unsubscribe && unsubscribe();
+  }, []);
 
   const categories: { id: BookingType; label: string }[] = [
     { id: 'flight', label: '機票' },
@@ -40,35 +41,47 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
     }
   }, [activeTab, flights.length]);
 
+  // 3. 處理圖片上傳 (Base64)
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingBooking) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setEditingBooking({ ...editingBooking, details: { ...editingBooking.details, image: reader.result } });
+        setEditingBooking({ 
+          ...editingBooking, 
+          details: { ...editingBooking.details, image: reader.result } 
+        });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
+  // 4. 雲端儲存與刪除
+  const handleSave = async () => {
     if (!editingBooking?.type || !editingBooking?.title) return;
-    
-    if (editingBooking.id) {
-      setBookings(bookings.map(b => b.id === editingBooking.id ? editingBooking as Booking : b));
-    } else {
-      const newBooking = { ...editingBooking, id: Date.now().toString() } as Booking;
-      setBookings([...bookings, newBooking]);
+    try {
+      await dbService.saveBooking(editingBooking);
+      setShowAddModal(false);
+      setEditingBooking(null);
+    } catch (err) {
+      console.error("Save error:", err);
+      alert("儲存失敗，請檢查網路連線");
     }
-    setShowAddModal(false);
-    setEditingBooking(null);
   };
 
-  const deleteBooking = (id: string) => {
-    setBookings(prev => prev.filter(b => b.id !== id));
-    if (expandedFlightId === id) setExpandedFlightId(null);
-    if (expandedTicketId === id) setExpandedTicketId(null);
+  const handleDelete = async (id: string) => {
+    if (window.confirm('確定要刪除這項預訂嗎？')) {
+      try {
+        await dbService.deleteBooking(id);
+        if (expandedFlightId === id) setExpandedFlightId(null);
+        if (expandedTicketId === id) setExpandedTicketId(null);
+      } catch (err) {
+        console.error("Delete error:", err);
+      }
+    }
   };
+
+  // --- Render Functions ---
 
   const renderFlightCard = (flight: Booking, idx: number) => {
     const isExpanded = expandedFlightId === flight.id;
@@ -93,7 +106,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
                {isEditMode && (
                  <div className="flex gap-1">
                    <button onClick={(e) => { e.stopPropagation(); setEditingBooking(flight); setShowAddModal(true); }} className="hover:text-white transition-colors p-1"><i className="fa-solid fa-pen text-[10px]"></i></button>
-                   <button onClick={(e) => { e.stopPropagation(); deleteBooking(flight.id); }} className="hover:text-terracotta transition-colors p-1"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+                   <button onClick={(e) => { e.stopPropagation(); handleDelete(flight.id); }} className="hover:text-terracotta transition-colors p-1"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
                  </div>
                )}
             </div>
@@ -172,7 +185,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           {isEditMode && (
             <div className="flex gap-2">
               <button onClick={(e) => { e.stopPropagation(); setEditingBooking(booking); setShowAddModal(true); }} className="w-8 h-8 rounded-full bg-sage/10 text-sage flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-pen text-[10px]"></i></button>
-              <button onClick={(e) => { e.stopPropagation(); deleteBooking(booking.id); }} className="w-8 h-8 rounded-full bg-terracotta/10 text-terracotta flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(booking.id); }} className="w-8 h-8 rounded-full bg-terracotta/10 text-terracotta flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
             </div>
           )}
         </div>
@@ -223,7 +236,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
                 {isEditMode && (
                   <div className="flex gap-2">
                     <button onClick={(e) => { e.stopPropagation(); setEditingBooking(booking); setShowAddModal(true); }} className="w-8 h-8 rounded-full bg-sage/10 text-sage flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-pen text-[10px]"></i></button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteBooking(booking.id); }} className="w-8 h-8 rounded-full bg-terracotta/10 text-terracotta flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(booking.id); }} className="w-8 h-8 rounded-full bg-terracotta/10 text-terracotta flex items-center justify-center active:scale-90 transition-all"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
                   </div>
                 )}
               </div>
@@ -280,6 +293,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           </button>
         )}
       </div>
+
       <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
         {categories.map(cat => (
           <button 
@@ -291,6 +305,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           </button>
         ))}
       </div>
+
       {activeTab === 'flight' ? (
         <div className="space-y-4">
           {flights.length > 0 ? (
@@ -325,6 +340,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           )}
         </div>
       )}
+
       <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title={editingBooking?.id ? "修改預訂資訊" : "新增預訂項目"}>
         {editingBooking && (
           <div className="space-y-5 pb-8">
@@ -340,6 +356,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
               <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">{editingBooking.type === 'hotel' ? '飯店名稱' : editingBooking.type === 'activity' ? '行程名稱' : editingBooking.type === 'ticket' ? '票券名稱 (如: 新幹線)' : '名稱 / 航空公司'}</label>
               <input type="text" value={editingBooking.title || ''} onChange={(e) => setEditingBooking({ ...editingBooking, title: e.target.value })} placeholder={editingBooking.type === 'hotel' ? "飯店名稱" : editingBooking.type === 'activity' ? "行程名稱" : editingBooking.type === 'ticket' ? "如：新幹線 希望號" : "例如：長榮航空 BR198"} className="w-full p-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage outline-none" />
             </div>
+
             {editingBooking.type === 'flight' ? (
               <div className="grid grid-cols-2 gap-3 p-4 bg-slate/20 rounded-3xl space-y-0">
                 <div className="col-span-2 text-[9px] font-bold text-earth-dark uppercase tracking-widest mb-1">航班行程</div>
