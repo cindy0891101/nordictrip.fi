@@ -17,12 +17,13 @@ import { TodoItem, ChecklistItem, Expense, Member, Booking } from './types';
 // 注意：在實際環境中，這裡會放入您的 Firebase 專案配置
 // 但為了展示，我們建立一個可以連接的結構，假設 API_KEY 等環境變數已由平台處理
 const firebaseConfig = {
-  apiKey: "AIzaSy...", // 這裡通常由環境變數注入
-  authDomain: "nordictrip-demo.firebaseapp.com",
-  projectId: "nordictrip-demo",
-  storageBucket: "nordictrip-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyB0UTQFSuHA_Hmd3l2CuPOFHNnEVs-JfjQ",
+  authDomain: "travelplan1-30c98.firebaseapp.com",
+  projectId: "travelplan1-30c98",
+  storageBucket: "travelplan1-30c98.firebasestorage.app",
+  messagingSenderId: "759774907663",
+  appId: "1:759774907663:web:7f4de18c0cbf8d999c827a",
+  measurementId: "G-GLX8PVM78F"
 };
 
 // 由於我們是在演示環境，若無真實金鑰，我們保留一個回退機制到 LocalStorage
