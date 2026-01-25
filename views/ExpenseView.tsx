@@ -279,14 +279,57 @@ useEffect(() => {
     }
   };
 
-  const handleUnarchiveSettlement = (id: string) => {
-    setArchivedSettlements(archivedSettlements.filter(a => a.id !== id));
+const handleUnarchiveSettlement = async (id: string) => {
+    // 加上確認視窗，防止誤點
+    if (!window.confirm("確定要刪除這筆結算紀錄嗎？")) return;
+
+    try {
+      // ✅ 改為呼叫雲端服務進行刪除
+      // 假設你的 dbService 裡有 deleteArchivedSettlement 這個方法
+      await dbService.deleteArchivedSettlement(id);
+      
+      // 不需要手動 setArchivedSettlements，
+      // 因為雲端刪除後，你的 useEffect 監聽器會收到通知並自動更新畫面。
+    } catch (error) {
+      console.error("刪除結算紀錄失敗:", error);
+      alert("雲端同步失敗，請檢查網路連線");
+    }
   };
 
-  const toggleClearedSplit = (expenseId: string, memberId: string) => {
+const toggleClearedSplit = async (expenseId: string, memberId: string) => {
     const key = `${expenseId}-${memberId}`;
-    setClearedSplits(prev => ({ ...prev, [key]: !prev[key] }));
+    
+    // 1. 算出新的狀態
+    const newClearedSplits = { 
+      ...clearedSplits, 
+      [key]: !clearedSplits[key] 
+    };
+
+    try {
+      // 2. 存入雲端 (假設 dbService 有 saveClearedSplits 方法)
+      await dbService.saveClearedSplits(newClearedSplits);
+      
+      // 注意：這裡不需要手動 setClearedSplits，
+      // 我們應該在 useEffect 裡監聽這個狀態。
+    } catch (error) {
+      console.error("更新結清狀態失敗:", error);
+    }
   };
+  useEffect(() => {
+  const unsubExpenses = dbService.subscribeExpenses(setExpenses);
+  const unsubArchived = dbService.subscribeArchivedSettlements(setArchivedSettlements);
+  
+  // 增加這一段監聽
+  const unsubCleared = dbService.subscribeClearedSplits?.((data) => {
+    if (data) setClearedSplits(data);
+  });
+
+  return () => {
+    unsubExpenses();
+    unsubArchived();
+    unsubCleared?.();
+  };
+}, []);
 
   const toggleSplitMember = (id: string) => {
     if (formData.splitWith.includes(id)) {
