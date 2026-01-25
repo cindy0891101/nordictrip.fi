@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { NordicCard, NordicButton, Modal } from '../components/Shared';
 import { CURRENCIES as INITIAL_CURRENCIES, CATEGORY_COLORS } from '../constants';
 import { Expense, Member } from '../types';
+import { dbService } from '../firebaseService';
 
 interface ArchivedSettlement {
   id: string;
@@ -26,15 +27,21 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
   const [showManageRates, setShowManageRates] = useState(false);
   const [showSettlement, setShowSettlement] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  // 加上監聽器
+useEffect(() => {
+  const unsubExpenses = dbService.subscribeExpenses((data) => setExpenses(data));
+  const unsubArchived = dbService.subscribeArchivedSettlements((data) => setArchivedSettlements(data));
+
+  return () => {
+    unsubExpenses();
+    unsubArchived();
+  };
+}, []);
   
-  const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('nordic_cleared_splits');
-    return saved ? JSON.parse(saved) : {};
+  const [clearedSplits, setClearedSplits] = useState<ClearedSplits[]>([]);
   });
 
-  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>(() => {
-    const saved = localStorage.getItem('nordic_archived_settlements');
-    return saved ? JSON.parse(saved) : [];
+  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>([]);
   });
 
   const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<string | null>(null);
