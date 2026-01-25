@@ -39,10 +39,8 @@ useEffect(() => {
 }, []);
   
   const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>({});
-  });
 
   const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>([]);
-  });
 
   const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<string | null>(null);
 
