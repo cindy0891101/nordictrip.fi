@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import ScheduleView from './views/ScheduleView';
 import BookingsView from './views/BookingsView';
@@ -8,22 +7,28 @@ import MembersView from './views/MembersView';
 import { Modal, NordicButton } from './components/Shared';
 import { MOCK_MEMBERS } from './constants';
 import { Member } from './types';
+import { dbService } from './firebaseService'; 
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'bookings' | 'expense' | 'planning' | 'members'>('schedule');
   const [isEditMode, setIsEditMode] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
+  const [members, setMembers] = useState<Member[]>([]);
 
-  // 成員狀態：從 LocalStorage 讀取，若無則使用 Mock
-  const [members, setMembers] = useState<Member[]>(() => {
-    const saved = localStorage.getItem('nordic_members');
-    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
-  });
-
+  // 初始化：從 Firebase 抓取成員
   useEffect(() => {
-    localStorage.setItem('nordic_members', JSON.stringify(members));
-  }, [members]);
+    const fetchMembers = async () => {
+      try {
+        const cloudMembers = await dbService.getMembers();
+        setMembers(cloudMembers.length > 0 ? cloudMembers : MOCK_MEMBERS);
+      } catch (error) {
+        console.error("無法載入成員資料:", error);
+        setMembers(MOCK_MEMBERS);
+      }
+    };
+    fetchMembers();
+  }, []);
 
   const handleToggleLock = () => {
     if (isEditMode) {
@@ -34,7 +39,6 @@ const App: React.FC = () => {
   };
 
   const handleVerifyPin = () => {
-    // 根據使用者要求改為 007
     if (pinInput === '007') {
       setIsEditMode(true);
       setShowLockModal(false);
@@ -45,13 +49,18 @@ const App: React.FC = () => {
     }
   };
 
-  const addMember = (name: string) => {
+  // 統一的新增成員邏輯 (包含 Firebase 同步預留)
+  const addMember = async (name: string) => {
     const newMember: Member = {
       id: Date.now().toString(),
       name,
       avatar: `https://picsum.photos/seed/${Math.random()}/100/100`
     };
-    setMembers([...members, newMember]);
+
+    // 如果 dbService 有寫入功能，請取消下面這行的註解
+    // await dbService.saveMember(newMember); 
+
+    setMembers(prev => [...prev, newMember]);
   };
 
   const renderContent = () => {
@@ -91,7 +100,7 @@ const App: React.FC = () => {
       </main>
 
       <Modal isOpen={showLockModal} onClose={() => setShowLockModal(false)} title="啟用編輯權限">
-        <div className="space-y-4 text-center overflow-x-hidden">
+        <div className="space-y-4 text-center">
           <p className="text-earth-dark text-sm font-bold">請輸入編輯密碼以開啟修改功能</p>
           <input 
             type="password" 
@@ -122,7 +131,7 @@ const App: React.FC = () => {
                   <div className="absolute top-[-12px] w-12 h-1.5 bg-sage rounded-full animate-in fade-in zoom-in duration-300"></div>
                 )}
                 <i className={`fa-solid ${item.icon} text-xl mb-1 ${active ? 'scale-110' : ''}`}></i>
-                <span className={`text-[10px] font-bold tracking-wider uppercase ${active ? 'opacity-100' : 'opacity-60'}`}>{item.label}</span>
+                <span className="text-[10px] font-bold tracking-wider uppercase">{item.label}</span>
               </button>
             );
           })}
