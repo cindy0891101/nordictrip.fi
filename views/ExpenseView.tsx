@@ -38,7 +38,7 @@ useEffect(() => {
   };
 }, []);
   
-  const [clearedSplits, setClearedSplits] = useState<ClearedSplits[]>([]);
+  const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>({});
   });
 
   const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>([]);
@@ -47,7 +47,7 @@ useEffect(() => {
   const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<string | null>(null);
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<string>(() => localStorage.getItem('nordic_last_sync') || '尚未同步');
+  const [lastSync, setLastSync] = useState<string>('同步中');
 
   const [currencyRates, setCurrencyRates] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('nordic_currency_rates');
