@@ -368,7 +368,7 @@ const toggleClearedSplit = async (expenseId: string, memberId: string) => {
     console.error("儲存失敗:", error);
     alert("雲端同步失敗，請檢查網路連線");
 };
-
+};
 
   const handleUpdateExpense = async () => {
     if (!formData.amount || formData.splitWith.length === 0) return;
