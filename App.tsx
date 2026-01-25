@@ -8,7 +8,6 @@ import MembersView from './views/MembersView';
 import { Modal, NordicButton } from './components/Shared';
 import { MOCK_MEMBERS } from './constants';
 import { Member } from './types';
-import { dbService } from './firebaseService';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'bookings' | 'expense' | 'planning' | 'members'>('schedule');
@@ -16,13 +15,14 @@ const App: React.FC = () => {
   const [showLockModal, setShowLockModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  // 成員狀態：從 dbService 讀取
+  // 成員狀態：從 LocalStorage 讀取，若無則使用 Mock
   const [members, setMembers] = useState<Member[]>(() => {
-    return dbService.get('nordic_members', MOCK_MEMBERS);
+    const saved = localStorage.getItem('nordic_members');
+    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
   });
 
   useEffect(() => {
-    dbService.set('nordic_members', members);
+    localStorage.setItem('nordic_members', JSON.stringify(members));
   }, [members]);
 
   const handleToggleLock = () => {
@@ -34,6 +34,7 @@ const App: React.FC = () => {
   };
 
   const handleVerifyPin = () => {
+    // 根據使用者要求改為 007
     if (pinInput === '007') {
       setIsEditMode(true);
       setShowLockModal(false);

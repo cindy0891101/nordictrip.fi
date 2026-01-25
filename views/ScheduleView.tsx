@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { NordicCard, Modal, NordicButton } from '../components/Shared';
 import { MOCK_SCHEDULE, MOCK_WEATHER, CATEGORY_COLORS } from '../constants';
 import { ScheduleItem, Category, WeatherInfo, DayMetadata } from '../types';
-import { dbService } from '../firebaseService';
 
 interface ExtendedWeatherInfo extends WeatherInfo {
   feelsLike: number;
@@ -49,6 +48,9 @@ const fixToTraditional = (text: string) => {
 
 const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
   const [fullSchedule, setFullSchedule] = useState<Record<string, DayData>>(() => {
+    const saved = localStorage.getItem('nordic_full_schedule');
+    if (saved) return JSON.parse(saved);
+
     const initial: Record<string, DayData> = {};
     Object.keys(MOCK_SCHEDULE).forEach(date => {
       initial[date] = {
@@ -60,7 +62,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
         }
       };
     });
-    return dbService.get('nordic_full_schedule', initial);
+    return initial;
   });
 
   const dates = useMemo(() => Object.keys(fullSchedule).sort(), [fullSchedule]);
@@ -82,7 +84,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
   const [shiftValue, setShiftValue] = useState(30);
 
   useEffect(() => {
-    dbService.set('nordic_full_schedule', fullSchedule);
+    localStorage.setItem('nordic_full_schedule', JSON.stringify(fullSchedule));
   }, [fullSchedule]);
 
   useEffect(() => {
@@ -368,7 +370,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
                 <div className="flex gap-3 overflow-x-auto no-scrollbar py-2 px-1 snap-x">
                   {tempMetadata.forecast.map((w, idx) => (
                     <div key={idx} className="bg-white/80 p-3 rounded-2xl min-w-[85px] text-center border border-slate shadow-inner snap-start">
-                      <span className="text-9px] font-bold text-earth-dark block mb-1">{w.hour}</span>
+                      <span className="text-[9px] font-bold text-earth-dark block mb-1">{w.hour}</span>
                       <i className={`fa-solid ${getWeatherDisplay(w.condition, w.hour)} text-lg block mb-1`}></i>
                       <div className="text-xs font-bold text-sage">{w.temp}°</div>
                       <div className="text-[8px] font-bold text-earth-dark/40">體感 {w.feelsLike}°</div>
