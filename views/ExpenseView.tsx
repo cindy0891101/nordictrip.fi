@@ -256,7 +256,7 @@ useEffect(() => {
     return activePlans;
   }, [expenses, members, currencyRates, clearedSplits, archivedSettlements]);
 
-  const handleArchiveSettlement = (plan: { from: string, to: string, amount: number }) => {
+ const handleArchiveSettlement = async (plan: { from: string, to: string, amount: number }) => {
     const newArchived: ArchivedSettlement = {
       id: Date.now().toString(),
       from: plan.from,
@@ -264,7 +264,19 @@ useEffect(() => {
       amount: plan.amount,
       date: new Date().toLocaleDateString()
     };
-    setArchivedSettlements([newArchived, ...archivedSettlements]);
+
+    try {
+      // ✅ 1. 呼叫雲端服務儲存結算紀錄
+      await dbService.saveArchivedSettlement(newArchived);
+      
+      // ✅ 2. 同時，你可能需要「清空」目前的支出帳目（這取決於你的邏輯）
+      // 如果你的邏輯是結算後就刪除所有舊帳，可以在這裡處理
+      
+      // 不需要手動 setArchivedSettlements，因為 useEffect 會監聽雲端並更新
+    } catch (error) {
+      console.error("結算存檔失敗:", error);
+      alert("雲端同步失敗，請檢查網路連線");
+    }
   };
 
   const handleUnarchiveSettlement = (id: string) => {
@@ -284,7 +296,7 @@ useEffect(() => {
     }
   };
 
-  const handleAddExpense = () => {
+  const handleAddExpense = async () => { // 1. 加上 async
     if (!formData.amount || formData.splitWith.length === 0) return;
     const exp: Expense = {
       id: Date.now().toString(),
@@ -297,18 +309,47 @@ useEffect(() => {
       date: formData.date || new Date().toISOString().split('T')[0],
       note: formData.note
     };
-    setExpenses([exp, ...expenses]);
+    try {
+    // 2. 呼叫雲端服務存檔，刪除原本的 setExpenses
+    await dbService.saveExpense(exp); 
+    
+    // 3. 成功後關閉視窗與清空表單
     setShowAdd(false);
-  };
+    setFormData({ 
+      ...formData, 
+      amount: '', 
+      note: '', 
+      id: '' 
+    });
+  } catch (error) {
+    console.error("儲存失敗:", error);
+    alert("雲端同步失敗，請檢查網路連線");
+};
 
-  const handleUpdateExpense = () => {
+
+  const handleUpdateExpense = async () => {
     if (!formData.amount || formData.splitWith.length === 0) return;
-    setExpenses(expenses.map(exp => exp.id === formData.id ? {
-      ...exp, amount: parseFloat(formData.amount), currency: formData.currency,
-      category: formData.category, payerId: formData.payerId,
-      splitWith: formData.splitWith, note: formData.note, date: formData.date
-    } : exp));
-    setShowEdit(false);
+// 準備更新後的資料
+    const updatedExpense: Expense = {
+      ...formData,
+      amount: parseFloat(formData.amount),
+      // 確保 ID 保持不變，這樣 Firebase 才會執行「覆蓋更新」而不是「新增」
+      id: formData.id, 
+      updatedAt: new Date() // 可以加上更新時間戳記
+    } as Expense;
+
+    try {
+      // ✅ 呼叫雲端服務進行更新
+      await dbService.saveExpense(updatedExpense);
+      
+      // ✅ 成功後關閉視窗
+      setShowEdit(false);
+      // 清空表單
+      setFormData({ ...formData, id: '', amount: '', note: '' });
+    } catch (error) {
+      console.error("更新失敗:", error);
+      alert("雲端更新失敗");
+    }
   };
 
   const startEdit = (exp: Expense) => {
