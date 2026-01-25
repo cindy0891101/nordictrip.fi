@@ -16,12 +16,13 @@ import { Expense, Member, ArchivedSettlement } from './types';
 
 // Firebase 配置 (請確保 apiKey 是正確的)
 const firebaseConfig = {
-  apiKey: "AIzaSy...", 
-  authDomain: "nordictrip-demo.firebaseapp.com",
-  projectId: "nordictrip-demo",
-  storageBucket: "nordictrip-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyB0UTQFSuHA_Hmd3l2CuPOFHNnEVs-JfjQ",
+  authDomain: "travelplan1-30c98.firebaseapp.com",
+  projectId: "travelplan1-30c98",
+  storageBucket: "travelplan1-30c98.firebasestorage.app",
+  messagingSenderId: "759774907663",
+  appId: "1:759774907663:web:7f4de18c0cbf8d999c827a",
+  measurementId: "G-GLX8PVM78F"
 };
 
 const app = initializeApp(firebaseConfig);
