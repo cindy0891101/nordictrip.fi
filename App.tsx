@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import ScheduleView from './views/ScheduleView';
 import BookingsView from './views/BookingsView';
@@ -6,8 +5,9 @@ import ExpenseView from './views/ExpenseView';
 import PlanningView from './views/PlanningView';
 import MembersView from './views/MembersView';
 import { Modal, NordicButton } from './components/Shared';
-import { MOCK_MEMBERS } from './constants';
 import { Member } from './types';
+// 引入你剛剛寫好的雲端服務
+import { dbService } from './firebaseService'; 
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'bookings' | 'expense' | 'planning' | 'members'>('schedule');
@@ -15,15 +15,20 @@ const App: React.FC = () => {
   const [showLockModal, setShowLockModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  // 成員狀態：從 LocalStorage 讀取，若無則使用 Mock
-  const [members, setMembers] = useState<Member[]>(() => {
-    const saved = localStorage.getItem('nordic_members');
-    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
-  });
+  // --- 關鍵修改：成員狀態改為由 Firebase 驅動 ---
+  const [members, setMembers] = useState<Member[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('nordic_members', JSON.stringify(members));
-  }, [members]);
+    // 啟動實時訂閱：當資料庫變動時，所有開啟 App 的人都會同時收到最新的 members
+    const unsubscribe = dbService.subscribeMembers((cloudMembers) => {
+      setMembers(cloudMembers);
+    });
+
+    // 組件卸載時停止訂閱
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
 
   const handleToggleLock = () => {
     if (isEditMode) {
@@ -34,7 +39,6 @@ const App: React.FC = () => {
   };
 
   const handleVerifyPin = () => {
-    // 根據使用者要求改為 007
     if (pinInput === '007') {
       setIsEditMode(true);
       setShowLockModal(false);
@@ -45,13 +49,21 @@ const App: React.FC = () => {
     }
   };
 
-  const addMember = (name: string) => {
+  // --- 關鍵修改：將新增成員存入 Firebase 而非 LocalStorage ---
+  const addMember = async (name: string) => {
     const newMember: Member = {
       id: Date.now().toString(),
       name,
       avatar: `https://picsum.photos/seed/${Math.random()}/100/100`
     };
-    setMembers([...members, newMember]);
+    
+    try {
+      await dbService.addMember(newMember);
+      // 注意：這裡不需要手動 setMembers，因為 subscribeMembers 會感應到變動並幫你更新
+    } catch (error) {
+      console.error("新增成員失敗:", error);
+      alert("同步失敗，請檢查網路連線");
+    }
   };
 
   const renderContent = () => {
