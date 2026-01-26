@@ -309,11 +309,15 @@ const toggleClearedSplit = async (expenseId: string, memberId: string) => {
 
 useEffect(() => {
   // 監聽支出
-  const unsubExpenses = dbService.subscribeExpenses((data) => {
-    console.log("收到雲端支出更新:", data);
-    setExpenses(data);
+const unsubExpenses = dbService.subscribeExpenses((data) => {
+    console.log("收到雲端支出更新，最新筆數：", data.length);
+    // ✅ 關鍵：使用展開運算子 [...] 建立新物件，強制 React 刷新畫面
+    setExpenses([...data]); 
   });
 
+  return () => unsubExpenses();
+}, []);
+  
   // 監聽結算
   const unsubArchived = dbService.subscribeArchivedSettlements((data) => {
     setArchivedSettlements(data);
