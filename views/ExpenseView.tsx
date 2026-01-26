@@ -339,21 +339,26 @@ const unsubExpenses = dbService.subscribeExpenses((data) => {
     }
   };
 
-  const handleDeleteExpense = async (id: string) => {
+const handleDeleteExpense = async (id: string) => {
+  if (!id) return;
   if (!window.confirm("確定要刪除這筆支出嗎？")) return;
 
   try {
-    // 1. 呼叫 Firebase 刪除
+    // 1. 先從雲端移除資料
     await dbService.deleteExpense(id);
     
-    // 2. 關閉編輯視窗
-    setShowEdit(false);
+    // 2. ⭐ 關鍵：同步更新本地 state
+    // 這會觸發 expenses 變動，進而讓依賴 expenses 的 categoryDetails 自動更新圖表
+    setExpenses(prev => prev.filter(e => e.id !== id));
     
-    // 💡 再次提醒：這裡不需要 setExpenses，因為 useEffect 的 subscribe 會自動同步更新畫面
-    console.log("✅ 雲端刪除成功");
+    // 3. 關閉視窗
+    setShowEdit(false);
+    setShowDetail(false);
+    
+    console.log("✅ 雲端與本地狀態已同步，圖表將重新計算");
   } catch (error) {
     console.error("❌ 刪除失敗:", error);
-    alert("雲端同步失敗");
+    alert("刪除失敗，請檢查網路");
   }
 };
   
