@@ -1,101 +1,135 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { 
-  getFirestore, 
-  collection, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc,
-  doc, 
-  query, 
-  orderBy,
+import {
+  getFirestore,
+  doc,
+  getDoc,
   setDoc,
-  getDocs
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { Expense, Member, ArchivedSettlement } from './types';
+  updateDoc,
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where,
+  serverTimestamp
+} from 'firebase/firestore';
 
-// Firebase 配置 (請確保 apiKey 是正確的)
-const firebaseConfig = {
-  apiKey: "AIzaSyB0UTQFSuHA_Hmd3l2CuPOFHNnEVs-JfjQ",
-  authDomain: "travelplan1-30c98.firebaseapp.com",
-  projectId: "travelplan1-30c98",
-  storageBucket: "travelplan1-30c98.firebasestorage.app",
-  messagingSenderId: "759774907663",
-  appId: "1:759774907663:web:7f4de18c0cbf8d999c827a",
-  measurementId: "G-GLX8PVM78F"
-};
+import { getAuth } from 'firebase/auth';
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = getFirestore();
+const auth = getAuth();
 
-export const dbService = {
-  // === 1. 成員同步 (解決你提到的不同步問題) ===
-  subscribeMembers: (callback: (members: Member[]) => void) => {
-    const q = query(collection(db, 'members'));
-    // 使用 onSnapshot 才能達成「多人即時同步」
-    return onSnapshot(q, (snapshot) => {
-      const members = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as Member));
-      callback(members);
-    });
-  },
+/* ----------------------------------
+   使用者（users）
+---------------------------------- */
 
-  addMember: async (member: Member) => {
-    // 使用 setDoc 配合 member.id，確保同一個人的 ID 在所有裝置都一樣
-    await setDoc(doc(db, 'members', member.id), member);
-  },
+// 取得目前登入者 UID（統一入口）
+function requireUid(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error('User not authenticated');
+  }
+  return uid;
+}
 
-  // === 2. 支出同步 ===
-  subscribeExpenses: (callback: (expenses: Expense[]) => void) => {
-    const q = query(collection(db, 'expenses'), orderBy('date', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      const expenses = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Expense));
-      callback(expenses);
-    });
-  },
+// 第一次登入時建立 users/{uid}
+export async function ensureUserDocument() {
+  const uid = requireUid();
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
 
-  saveExpense: async (expense: Expense) => {
-    if (expense.id && expense.id.length > 15) { // 假設手動生成的 ID 較長
-      await setDoc(doc(db, 'expenses', expense.id), { ...expense, updatedAt: new Date() });
-    } else {
-      await addDoc(collection(db, 'expenses'), { ...expense, createdAt: new Date() });
-    }
-  },
-
-  deleteExpense: async (id: string) => {
-    await deleteDoc(doc(db, 'expenses', id));
-  },
-
-  // === 3. 結算同步 ===
-  subscribeArchivedSettlements: (callback: (data: ArchivedSettlement[]) => void) => {
-    const q = query(collection(db, 'settlements'), orderBy('date', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchivedSettlement));
-      callback(data);
-    });
-  },
-
-  saveArchivedSettlement: async (data: ArchivedSettlement) => {
-    await setDoc(doc(db, 'settlements', data.id), data);
-  },
-
-  // === 4. 行程同步 ===
-  subscribeSchedule: (callback: (data: any) => void) => {
-    const q = query(collection(db, "schedules"), orderBy("time"));
-    return onSnapshot(q, (snapshot) => {
-      const data: any = {};
-      snapshot.forEach((doc) => {
-        const item = doc.data();
-        const date = item.date;
-        if (!data[date]) data[date] = [];
-        data[date].push({ id: doc.id, ...item });
-      });
-      callback(data);
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      role: 'user',       // admin / user
+      enabled: false,     // ❗ 預設不可用，由 admin 開
+      createdAt: serverTimestamp()
     });
   }
-};
+}
+
+// 取得自己的 user 設定（判斷 enabled / role）
+export async function getMyUserInfo() {
+  const uid = requireUid();
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+/* ----------------------------------
+   Members（成員）- admin only write
+---------------------------------- */
+
+export async function getMembers() {
+  const snap = await getDocs(collection(db, 'members'));
+  return snap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+export async function addMember(name: string) {
+  return await addDoc(collection(db, 'members'), {
+    name,
+    createdAt: serverTimestamp()
+  });
+}
+
+/* ----------------------------------
+   Lists（每個人自己的清單）
+---------------------------------- */
+
+export async function getMyLists() {
+  const uid = requireUid();
+
+  const q = query(
+    collection(db, 'lists'),
+    where('ownerUid', '==', uid)
+  );
+
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+export async function createList(title: string) {
+  const uid = requireUid();
+
+  return await addDoc(collection(db, 'lists'), {
+    title,
+    ownerUid: uid,
+    createdAt: serverTimestamp()
+  });
+}
+
+/* ----------------------------------
+   Expenses（分帳）
+---------------------------------- */
+
+export async function getExpenses(listId: string) {
+  const q = query(
+    collection(db, 'expenses'),
+    where('listId', '==', listId)
+  );
+
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+export async function addExpense(params: {
+  listId: string;
+  title: string;
+  amount: number;
+  paidByMemberId: string;
+  splitMemberIds: string[];
+}) {
+  const uid = requireUid();
+
+  return await addDoc(collection(db, 'expenses'), {
+    ...params,
+    createdBy: uid,
+    createdAt: serverTimestamp()
+  });
+}
