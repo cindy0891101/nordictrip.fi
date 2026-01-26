@@ -6,7 +6,7 @@ import ExpenseView from './views/ExpenseView';
 import PlanningView from './views/PlanningView';
 import MembersView from './views/MembersView';
 import { Modal, NordicButton } from './components/Shared';
-import { MOCK_MEMBERS } from './constants';
+import { membersService } from './firebaseService';
 import { Member } from './types';
 
 const App: React.FC = () => {
@@ -15,15 +15,23 @@ const App: React.FC = () => {
   const [showLockModal, setShowLockModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  const [members, setMembers] = useState<Member[]>(() => {
-    const saved = localStorage.getItem('nordic_members');
-    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
+const [members, setMembers] = useState<Member[]>([]);
+
+useEffect(() => {
+  const unsubscribe = membersService.subscribe((membersFromDb) => {
+    setMembers(
+      membersFromDb.map((m) => ({
+        ...m,
+        avatar:
+          m.avatar ||
+          `https://picsum.photos/seed/${m.id}/100/100`,
+      }))
+    );
   });
 
-  useEffect(() => {
-    localStorage.setItem('nordic_members', JSON.stringify(members));
-  }, [members]);
-
+  return () => unsubscribe();
+}, []);
+  
   const handleToggleLock = () => {
     if (isEditMode) {
       setIsEditMode(false);
@@ -43,30 +51,27 @@ const App: React.FC = () => {
     }
   };
 
-  const addMember = (name: string) => {
-    const newMember: Member = {
-      id: Date.now().toString(),
-      name,
-      avatar: `https://picsum.photos/seed/${Math.random()}/100/100`
-    };
-    setMembers([...members, newMember]);
-  };
+const addMember = async (name: string) => {
+  await membersService.add(name);
+};
+  
+const deleteMember = async (id: string) => {
+  if (members.length <= 1) {
+    alert('旅程至少需要一位成員！');
+    return;
+  }
+  await membersService.remove(id);
+};
 
-  const deleteMember = (id: string) => {
-    if (members.length <= 1) {
-      alert('旅程至少需要一位成員！');
-      return;
-    }
-    setMembers(members.filter(m => m.id !== id));
-  };
+const updateMemberAvatar = (id: string, avatar: string) => {
+  setMembers((prev) =>
+    prev.map((m) => (m.id === id ? { ...m, avatar } : m))
+  );
+};
+const updateMemberName = async (id: string, name: string) => {
+  await membersService.updateName(id, name);
+};
 
-  const updateMemberAvatar = (id: string, avatar: string) => {
-    setMembers(members.map(m => m.id === id ? { ...m, avatar } : m));
-  };
-
-  const updateMemberName = (id: string, name: string) => {
-    setMembers(members.map(m => m.id === id ? { ...m, name } : m));
-  };
 
   const renderContent = () => {
     switch (activeTab) {
