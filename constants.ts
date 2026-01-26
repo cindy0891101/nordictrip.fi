@@ -8,12 +8,12 @@ export const MOCK_MEMBERS: Member[] = [
 ];
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  Attraction: 'bg-morandi-blue',
-  Food: 'bg-morandi-pink',
-  Transport: 'bg-sage',
-  Accommodation: 'bg-terracotta',
-  Activity: 'bg-[#9BA4B5]',
-  Shopping: 'bg-[#B4846C]'
+  Attraction: 'bg-harbor', // Harbor Blue
+  Food: 'bg-paper',      // Aged Paper
+  Transport: 'bg-steel',  // Faded Steel
+  Accommodation: 'bg-ink', // Ink Charcoal
+  Activity: 'bg-harbor',  // Harbor Blue (Variation)
+  Shopping: 'bg-stamp'    // Stamp Red
 };
 
 export const MOCK_SCHEDULE: Record<string, ScheduleItem[]> = {

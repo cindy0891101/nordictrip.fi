@@ -1,8 +1,8 @@
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { NordicCard, NordicButton, Modal } from '../components/Shared';
 import { CURRENCIES as INITIAL_CURRENCIES, CATEGORY_COLORS } from '../constants';
 import { Expense, Member } from '../types';
-import { dbService } from '../firebaseService';
 
 interface ArchivedSettlement {
   id: string;
@@ -27,16 +27,21 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
   const [showManageRates, setShowManageRates] = useState(false);
   const [showSettlement, setShowSettlement] = useState(false);
   const [showChart, setShowChart] = useState(false);
-
   
-  const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>({});
+  const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('nordic_cleared_splits');
+    return saved ? JSON.parse(saved) : {};
+  });
 
-  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>([]);
+  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>(() => {
+    const saved = localStorage.getItem('nordic_archived_settlements');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<string | null>(null);
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<string>('同步中');
+  const [lastSync, setLastSync] = useState<string>(() => localStorage.getItem('nordic_last_sync') || '尚未同步');
 
   const [currencyRates, setCurrencyRates] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('nordic_currency_rates');
@@ -247,7 +252,7 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
     return activePlans;
   }, [expenses, members, currencyRates, clearedSplits, archivedSettlements]);
 
- const handleArchiveSettlement = async (plan: { from: string, to: string, amount: number }) => {
+  const handleArchiveSettlement = (plan: { from: string, to: string, amount: number }) => {
     const newArchived: ArchivedSettlement = {
       id: Date.now().toString(),
       from: plan.from,
@@ -255,82 +260,18 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
       amount: plan.amount,
       date: new Date().toLocaleDateString()
     };
-
-    try {
-      // ✅ 1. 呼叫雲端服務儲存結算紀錄
-      await dbService.saveArchivedSettlement(newArchived);
-      
-      // ✅ 2. 同時，你可能需要「清空」目前的支出帳目（這取決於你的邏輯）
-      // 如果你的邏輯是結算後就刪除所有舊帳，可以在這裡處理
-      
-      // 不需要手動 setArchivedSettlements，因為 useEffect 會監聽雲端並更新
-    } catch (error) {
-      console.error("結算存檔失敗:", error);
-      alert("雲端同步失敗，請檢查網路連線");
-    }
+    setArchivedSettlements([newArchived, ...archivedSettlements]);
   };
 
-const handleUnarchiveSettlement = async (id: string) => {
-    // 加上確認視窗，防止誤點
-    if (!window.confirm("確定要刪除這筆結算紀錄嗎？")) return;
-
-    try {
-      // ✅ 改為呼叫雲端服務進行刪除
-      // 假設你的 dbService 裡有 deleteArchivedSettlement 這個方法
-      await dbService.deleteArchivedSettlement(id);
-      
-      // 不需要手動 setArchivedSettlements，
-      // 因為雲端刪除後，你的 useEffect 監聽器會收到通知並自動更新畫面。
-    } catch (error) {
-      console.error("刪除結算紀錄失敗:", error);
-      alert("雲端同步失敗，請檢查網路連線");
-    }
+  const handleUnarchiveSettlement = (id: string) => {
+    setArchivedSettlements(archivedSettlements.filter(a => a.id !== id));
   };
 
-const toggleClearedSplit = async (expenseId: string, memberId: string) => {
+  const toggleClearedSplit = (expenseId: string, memberId: string) => {
     const key = `${expenseId}-${memberId}`;
-    
-    // 1. 算出新的狀態
-    const newClearedSplits = { 
-      ...clearedSplits, 
-      [key]: !clearedSplits[key] 
-    };
-
-    try {
-      // 2. 存入雲端 (假設 dbService 有 saveClearedSplits 方法)
-      await dbService.saveClearedSplits(newClearedSplits);
-      
-      // 注意：這裡不需要手動 setClearedSplits，
-      // 我們應該在 useEffect 裡監聽這個狀態。
-    } catch (error) {
-      console.error("更新結清狀態失敗:", error);
-    }
+    setClearedSplits(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-useEffect(() => {
-  // 監聽支出
-const unsubExpenses = dbService.subscribeExpenses((data) => {
-    console.log("收到雲端支出更新，最新筆數：", data.length);
-    // ✅ 關鍵：使用展開運算子 [...] 建立新物件，強制 React 刷新畫面
-    setExpenses([...data]); 
-  });
-  
-  // 監聽結算
-  const unsubArchived = dbService.subscribeArchivedSettlements((data) => {
-    setArchivedSettlements(data);
-  });
-
-  // 監聽勾選狀態 (如果 dbService 有支援)
-  const unsubCleared = dbService.subscribeClearedSplits?.((data) => {
-    if (data) setClearedSplits(data);
-  });
-
-  return () => {
-    unsubExpenses();
-    unsubArchived();
-    unsubCleared?.();
-  };
-}, []);
   const toggleSplitMember = (id: string) => {
     if (formData.splitWith.includes(id)) {
       setFormData({ ...formData, splitWith: formData.splitWith.filter(i => i !== id) });
@@ -339,30 +280,7 @@ const unsubExpenses = dbService.subscribeExpenses((data) => {
     }
   };
 
-const handleDeleteExpense = async (id: string) => {
-  if (!id) return;
-  if (!window.confirm("確定要刪除這筆支出嗎？")) return;
-
-  try {
-    // 1. 先從雲端移除資料
-    await dbService.deleteExpense(id);
-    
-    // 2. ⭐ 關鍵：同步更新本地 state
-    // 這會觸發 expenses 變動，進而讓依賴 expenses 的 categoryDetails 自動更新圖表
-    setExpenses(prev => prev.filter(e => e.id !== id));
-    
-    // 3. 關閉視窗
-    setShowEdit(false);
-    setShowDetail(false);
-    
-    console.log("✅ 雲端與本地狀態已同步，圖表將重新計算");
-  } catch (error) {
-    console.error("❌ 刪除失敗:", error);
-    alert("刪除失敗，請檢查網路");
-  }
-};
-  
-  const handleAddExpense = async () => { // 1. 加上 async
+  const handleAddExpense = () => {
     if (!formData.amount || formData.splitWith.length === 0) return;
     const exp: Expense = {
       id: Date.now().toString(),
@@ -375,47 +293,18 @@ const handleDeleteExpense = async (id: string) => {
       date: formData.date || new Date().toISOString().split('T')[0],
       note: formData.note
     };
-    try {
-    // 2. 呼叫雲端服務存檔，刪除原本的 setExpenses
-    await dbService.saveExpense(exp); 
-    
-    // 3. 成功後關閉視窗與清空表單
+    setExpenses([exp, ...expenses]);
     setShowAdd(false);
-    setFormData({ 
-      ...formData, 
-      amount: '', 
-      note: '', 
-      id: '' 
-    });
-  } catch (error) {
-    console.error("儲存失敗:", error);
-    alert("雲端同步失敗，請檢查網路連線");
-}
-};
+  };
 
-  const handleUpdateExpense = async () => {
+  const handleUpdateExpense = () => {
     if (!formData.amount || formData.splitWith.length === 0) return;
-// 準備更新後的資料
-    const updatedExpense: Expense = {
-      ...formData,
-      amount: parseFloat(formData.amount),
-      // 確保 ID 保持不變，這樣 Firebase 才會執行「覆蓋更新」而不是「新增」
-      id: formData.id, 
-      updatedAt: new Date() // 可以加上更新時間戳記
-    } as Expense;
-
-    try {
-      // ✅ 呼叫雲端服務進行更新
-      await dbService.saveExpense(updatedExpense);
-      
-      // ✅ 成功後關閉視窗
-      setShowEdit(false);
-      // 清空表單
-      setFormData({ ...formData, id: '', amount: '', note: '' });
-    } catch (error) {
-      console.error("更新失敗:", error);
-      alert("雲端更新失敗");
-    }
+    setExpenses(expenses.map(exp => exp.id === formData.id ? {
+      ...exp, amount: parseFloat(formData.amount), currency: formData.currency,
+      category: formData.category, payerId: formData.payerId,
+      splitWith: formData.splitWith, note: formData.note, date: formData.date
+    } : exp));
+    setShowEdit(false);
   };
 
   const startEdit = (exp: Expense) => {
@@ -432,9 +321,16 @@ const handleDeleteExpense = async (id: string) => {
     setShowEdit(true);
   };
 
+  // 更新邏輯：當且僅當分攤人數等於總人數時，該筆才列入「團隊總支出」
   const totalTeamTWD = useMemo(() => 
-    expenses.reduce((acc, curr) => acc + (curr.amount * (currencyRates[curr.currency] || 1)), 0)
-  , [expenses, currencyRates]);
+    expenses.reduce((acc, curr) => {
+      const isGroupExpense = curr.splitWith.length === members.length;
+      if (isGroupExpense) {
+        return acc + (curr.amount * (currencyRates[curr.currency] || 1));
+      }
+      return acc;
+    }, 0)
+  , [expenses, currencyRates, members.length]);
 
   const getCoordinatesForPercent = (percent: number, radius: number = 1) => {
     const x = radius * Math.cos(2 * Math.PI * percent);
@@ -496,7 +392,7 @@ const handleDeleteExpense = async (id: string) => {
         <div className="relative z-10 space-y-5">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[11px] text-sage font-bold uppercase tracking-[0.15em] opacity-80">團隊總支出</span>
+              <span className="text-[11px] text-sage font-bold uppercase tracking-[0.15em] opacity-80">團隊總支出 (全體分攤項)</span>
               <div className="text-3xl font-bold text-[#5C4D3C] mt-1">NT$ {Math.round(totalTeamTWD).toLocaleString()}</div>
             </div>
             <div className="bg-white/40 p-2 rounded-2xl"><i className="fa-solid fa-coins text-[#5C4D3C] text-xl"></i></div>
@@ -809,7 +705,7 @@ const handleDeleteExpense = async (id: string) => {
                 <div className="space-y-3 w-full">
                    <div className="px-2 pb-4 text-center">
                      <span className="text-[11px] font-bold text-earth-dark uppercase tracking-[0.2em] opacity-80">
-                        總支出 NT$ {Math.round(totalTeamTWD).toLocaleString()}
+                        總支出 NT$ {Math.round(chartData.reduce((acc, s) => acc + s.amount, 0)).toLocaleString()}
                      </span>
                    </div>
                   {chartData.map((slice, i) => (
@@ -956,9 +852,7 @@ const handleDeleteExpense = async (id: string) => {
           </div>
 
           <div className="flex gap-4 pt-4">
-           <button onClick={() => handleDeleteExpense(formData.id)} className="flex-1 h-16 bg-terracotta text-white rounded-3xl shadow-lg active:scale-95 transition-all">
-             <i className="fa-solid fa-trash"></i>
-             </button>
+            <button onClick={() => { setExpenses(expenses.filter(e => e.id !== formData.id)); setShowEdit(false); }} className="flex-1 h-16 bg-terracotta text-white rounded-3xl shadow-lg active:scale-95 transition-all"><i className="fa-solid fa-trash"></i></button>
             <button onClick={handleUpdateExpense} className="flex-1 h-16 bg-sage text-white rounded-3xl font-bold shadow-lg active:scale-95 transition-all">儲存修改</button>
           </div>
         </div>

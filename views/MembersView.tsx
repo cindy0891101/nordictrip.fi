@@ -1,21 +1,64 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { NordicCard, Modal, NordicButton } from '../components/Shared';
 import { Member } from '../types';
 
 interface MembersViewProps {
   members: Member[];
   onAddMember: (name: string) => void;
+  onUpdateAvatar: (id: string, avatar: string) => void;
+  onDeleteMember: (id: string) => void;
+  onUpdateName: (id: string, name: string) => void;
+  isEditMode: boolean;
 }
 
-const MembersView: React.FC<MembersViewProps> = ({ members, onAddMember }) => {
+const MembersView: React.FC<MembersViewProps> = ({ 
+  members, 
+  onAddMember, 
+  onUpdateAvatar, 
+  onDeleteMember,
+  onUpdateName,
+  isEditMode 
+}) => {
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [newName, setNewName] = useState('');
+  const [editNameValue, setEditNameValue] = useState('');
+  const [currentEditId, setCurrentEditId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAdd = () => {
     if (newName.trim()) {
       onAddMember(newName.trim());
       setNewName('');
       setShowInviteModal(false);
+    }
+  };
+
+  const handleUpdateNameSubmit = () => {
+    if (currentEditId && editNameValue.trim()) {
+      onUpdateName(currentEditId, editNameValue.trim());
+      setShowEditNameModal(false);
+      setCurrentEditId(null);
+    }
+  };
+
+  const handleCameraClick = (id: string) => {
+    if (!isEditMode) return;
+    setCurrentEditId(id);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && currentEditId) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onUpdateAvatar(currentEditId, reader.result as string);
+        setCurrentEditId(null);
+        e.target.value = '';
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -26,29 +69,72 @@ const MembersView: React.FC<MembersViewProps> = ({ members, onAddMember }) => {
         <p className="text-earth-dark mt-1 font-bold">旅伴們一起快樂出遊</p>
       </div>
 
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept="image/*" 
+        className="hidden" 
+      />
+
       <div className="grid grid-cols-2 gap-4">
         {members.map(member => (
-          <NordicCard key={member.id} className="text-center py-8">
+          <NordicCard key={member.id} className="text-center py-8 relative group overflow-visible">
+            {/* 刪除按鈕：僅在編輯模式顯示 */}
+            {isEditMode && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); onDeleteMember(member.id); }}
+                className="absolute -top-2 -right-2 w-7 h-7 bg-terracotta text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all z-10"
+              >
+                <i className="fa-solid fa-xmark text-xs"></i>
+              </button>
+            )}
+
             <div className="relative inline-block mb-3">
-              <img src={member.avatar} className="w-24 h-24 rounded-full border-4 border-slate shadow-inner" alt={member.name} />
-              <div className="absolute bottom-0 right-0 bg-sage text-white w-8 h-8 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all">
-                <i className="fa-solid fa-camera text-xs"></i>
-              </div>
+              <img src={member.avatar} className="w-24 h-24 rounded-full border-4 border-slate shadow-inner object-cover" alt={member.name} />
+              
+              {/* 相機圖示：僅在編輯模式顯示 */}
+              {isEditMode && (
+                <div 
+                  onClick={(e) => { e.stopPropagation(); handleCameraClick(member.id); }}
+                  className="absolute bottom-0 right-0 bg-sage text-white w-8 h-8 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all shadow-md"
+                >
+                  <i className="fa-solid fa-camera text-xs"></i>
+                </div>
+              )}
             </div>
-            <h3 className="text-xl font-bold text-sage">{member.name}</h3>
-            <span className="text-[10px] text-earth-dark font-bold uppercase tracking-widest block mt-1">Adventure Buddy</span>
+
+            <div 
+              onClick={() => {
+                if (isEditMode) {
+                  setCurrentEditId(member.id);
+                  setEditNameValue(member.name);
+                  setShowEditNameModal(true);
+                }
+              }}
+              className={`group/name flex flex-col items-center ${isEditMode ? 'cursor-pointer' : ''}`}
+            >
+              <h3 className="text-xl font-bold text-sage flex items-center gap-1.5">
+                {member.name}
+                {isEditMode && <i className="fa-solid fa-pen text-[10px] opacity-0 group-hover/name:opacity-100 transition-opacity"></i>}
+              </h3>
+              <span className="text-[10px] text-earth-dark font-bold uppercase tracking-widest block mt-1">Adventure Buddy</span>
+            </div>
           </NordicCard>
         ))}
         
-        <NordicCard 
-          onClick={() => setShowInviteModal(true)}
-          className="border-2 border-dashed border-earth bg-white/30 flex flex-col items-center justify-center py-8 opacity-60 hover:opacity-100 transition-opacity"
-        >
-          <div className="w-16 h-16 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-2">
-            <i className="fa-solid fa-user-plus text-earth"></i>
-          </div>
-          <span className="text-sm font-bold text-earth">邀請新旅伴</span>
-        </NordicCard>
+        {/* 新增旅伴卡片：僅在編輯模式顯示 */}
+        {isEditMode && (
+          <NordicCard 
+            onClick={() => setShowInviteModal(true)}
+            className="border-2 border-dashed border-earth bg-white/30 flex flex-col items-center justify-center py-8 opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <div className="w-16 h-16 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-2">
+              <i className="fa-solid fa-user-plus text-earth"></i>
+            </div>
+            <span className="text-sm font-bold text-earth">邀請新旅伴</span>
+          </NordicCard>
+        )}
       </div>
 
       <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="邀請新旅伴">
@@ -66,6 +152,24 @@ const MembersView: React.FC<MembersViewProps> = ({ members, onAddMember }) => {
           </div>
           <NordicButton onClick={handleAdd} className="w-full py-4">
             確定加入
+          </NordicButton>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showEditNameModal} onClose={() => setShowEditNameModal(false)} title="修改旅伴姓名">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">新姓名</label>
+            <input 
+              type="text" 
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              className="w-full p-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage outline-none"
+              autoFocus
+            />
+          </div>
+          <NordicButton onClick={handleUpdateNameSubmit} className="w-full py-4">
+            更新姓名
           </NordicButton>
         </div>
       </Modal>

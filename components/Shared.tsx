@@ -1,9 +1,10 @@
+
 import React from 'react';
 
 export const NordicCard: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className = '', onClick }) => (
   <div 
     onClick={onClick}
-    className={`bg-white rounded-3xl p-5 nordic-shadow border-2 border-slate ${className} active:scale-[0.98] transition-all duration-200 cursor-pointer`}
+    className={`bg-white/80 backdrop-blur-sm rounded-3xl p-5 nordic-shadow border-2 border-paper/40 ${className} active:scale-[0.98] transition-all duration-200 cursor-pointer`}
   >
     {children}
   </div>
@@ -12,11 +13,11 @@ export const NordicCard: React.FC<{ children: React.ReactNode; className?: strin
 export const NordicButton: React.FC<{ children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'danger'; className?: string }> = ({ 
   children, onClick, variant = 'primary', className = '' 
 }) => {
-  const base = "px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 nordic-shadow flex items-center justify-center gap-2";
+  const base = "px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2";
   const variants = {
-    primary: "bg-sage text-white border-2 border-white",
-    secondary: "bg-white text-sage border-2 border-slate",
-    danger: "bg-terracotta text-white border-2 border-white"
+    primary: "bg-harbor text-cream border-2 border-harbor/20",
+    secondary: "bg-paper/40 text-harbor border-2 border-paper",
+    danger: "bg-stamp text-cream border-2 border-stamp/20"
   };
   
   return (
@@ -29,11 +30,11 @@ export const NordicButton: React.FC<{ children: React.ReactNode; onClick?: () =>
 export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/50 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-cream w-full max-w-sm rounded-4xl p-6 relative animate-in zoom-in duration-300 nordic-shadow border-2 border-slate/50 shadow-2xl flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ink/60 backdrop-blur-md animate-in fade-in duration-300">
+      <div className="bg-cream w-full max-w-sm rounded-4xl p-6 relative animate-in zoom-in duration-300 border-2 border-paper/50 shadow-2xl flex flex-col max-h-[85vh]">
         <div className="flex justify-between items-center mb-6 flex-shrink-0 bg-transparent">
-          <h2 className="text-xl font-bold text-sage bg-transparent">{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate/50 text-sage hover:bg-slate text-2xl transition-all">&times;</button>
+          <h2 className="text-xl font-bold text-harbor bg-transparent">{title}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-paper/50 text-harbor hover:bg-paper text-2xl transition-all">&times;</button>
         </div>
         <div className="overflow-y-auto no-scrollbar flex-grow bg-transparent">
           {children}

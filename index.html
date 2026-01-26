@@ -11,34 +11,33 @@
     <style>
         body {
             font-family: 'Noto Serif TC', serif;
-            background-color: #F7F4EB;
+            background-color: #E7DDD3;
+            /* 模擬海港晨霧感 */
             background-image: 
-                linear-gradient(rgba(224, 229, 213, 0.2) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(224, 229, 213, 0.2) 1px, transparent 1px);
-            background-size: 20px 20px;
+                radial-gradient(circle at 0% 0%, rgba(87, 124, 142, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(142, 156, 163, 0.05) 0%, transparent 50%);
+            background-attachment: fixed;
             -webkit-tap-highlight-color: transparent;
-            /* 徹底防止橫向滑動 */
             overflow-x: hidden;
             width: 100vw;
             position: relative;
             touch-action: pan-y;
+            color: #2B2C2B;
         }
         .nordic-shadow {
-            box-shadow: 4px 4px 0px #E0E5D5;
+            box-shadow: 6px 6px 0px rgba(142, 156, 163, 0.2);
         }
         .glass-nav {
-            background: rgba(247, 244, 235, 0.85);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            background: #2B2C2B;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
         }
         input:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: #A3A380;
+            border-color: #577C8E;
         }
         ::-webkit-scrollbar {
             display: none;
         }
-        /* 修復 iOS 時間與日期輸入框寬度與樣式問題 */
         input[type="time"], input[type="date"] {
             -webkit-appearance: none;
             appearance: none;
@@ -46,23 +45,28 @@
             display: block;
             background-color: white;
         }
+        /* 選中圖標的 Harbor Blue 藍色光影 */
+        .active-glow {
+            filter: drop-shadow(0 0 8px rgba(87, 124, 142, 0.6));
+        }
     </style>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        cream: '#F7F4EB',
-                        earth: '#D6CEBE',
-                        'earth-dark': '#967E67',
-                        sage: '#A3A380',
-                        terracotta: '#D4A373',
-                        slate: '#E0E5D5',
-                        morandi: {
-                            blue: '#B6C1C9',
-                            pink: '#D8B4A0',
-                            green: '#C1CDBE'
-                        }
+                        cream: '#E7DDD3',   // Postcard Cream
+                        paper: '#D2C2B2',   // Aged Paper
+                        steel: '#8E9CA3',   // Faded Steel
+                        harbor: '#577C8E',  // Harbor Blue
+                        stamp: '#DC8670',   // Warm Coral (Updated from #E8665B)
+                        ink: '#2B2C2B',     // Ink Charcoal
+                        /* 映射舊有名稱以維持模板相容性 */
+                        sage: '#577C8E',
+                        earth: '#D2C2B2',
+                        'earth-dark': '#8E9CA3',
+                        terracotta: '#DC8670', // Updated from #E8665B
+                        slate: '#D2C2B2'
                     },
                     borderRadius: {
                         '3xl': '1.5rem',
