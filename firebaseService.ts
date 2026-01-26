@@ -1,80 +1,190 @@
-
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { 
-  getFirestore, 
-  collection, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  query, 
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
   orderBy,
-  setDoc,
-  getDocs
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { TodoItem, ChecklistItem, Expense, Member, Booking } from './types';
+  doc,
+} from "firebase/firestore";
 
-// 注意：在實際環境中，這裡會放入您的 Firebase 專案配置
-// 但為了展示，我們建立一個可以連接的結構，假設 API_KEY 等環境變數已由平台處理
+import { Member, Expense, Booking } from "./types";
+
+/* =========================
+   Firebase 初始化
+========================= */
+
 const firebaseConfig = {
-  apiKey: "AIzaSy...", // 這裡通常由環境變數注入
-  authDomain: "nordictrip-demo.firebaseapp.com",
-  projectId: "nordictrip-demo",
-  storageBucket: "nordictrip-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// 由於我們是在演示環境，若無真實金鑰，我們保留一個回退機制到 LocalStorage
-// 但代碼邏輯已完全符合 Firestore v10 規範
-let db: any;
-try {
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-} catch (e) {
-  console.warn("Firebase 初始化失敗，切換至離線模擬模式");
-}
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-export const dbService = {
-  // 監聽行程更新
-  subscribeSchedule: (callback: (data: any) => void) => {
-    if (!db) return;
-    const q = query(collection(db, "schedules"), orderBy("time"));
-    return onSnapshot(q, (snapshot) => {
-      const data: any = {};
-      snapshot.forEach((doc) => {
-        const item = doc.data();
-        const date = item.date;
-        if (!data[date]) data[date] = [];
-        data[date].push({ id: doc.id, ...item });
-      });
-      callback(data);
+/* =========================
+   共用 tripId（暫時）
+   之後可換成動態
+========================= */
+
+const DEFAULT_TRIP_ID = "default-trip";
+
+/* =========================
+   Members
+========================= */
+
+export const membersService = {
+  subscribe: (callback: (members: Member[]) => void) => {
+    const colRef = collection(
+      db,
+      "trips",
+      DEFAULT_TRIP_ID,
+      "members"
+    );
+
+    return onSnapshot(colRef, (snapshot) => {
+      const members = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Member[];
+
+      callback(members);
     });
   },
 
-  // 新增/更新支出
-  saveExpense: async (expense: Omit<Expense, 'id'>) => {
-    if (!db) {
-      const current = JSON.parse(localStorage.getItem('expenses') || '[]');
-      localStorage.setItem('expenses', JSON.stringify([{ id: Date.now().toString(), ...expense }, ...current]));
-      return;
-    }
-    await addDoc(collection(db, "expenses"), { ...expense, createdAt: new Date() });
+  add: async (name: string) => {
+    await addDoc(
+      collection(db, "trips", DEFAULT_TRIP_ID, "members"),
+      {
+        name,
+        createdAt: serverTimestamp(),
+      }
+    );
   },
 
-  // 獲取所有成員
-  getMembers: async () => {
-    if (!db) return JSON.parse(localStorage.getItem('members') || '[]');
-    const querySnapshot = await getDocs(collection(db, "members"));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  updateName: async (memberId: string, name: string) => {
+    await updateDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "members", memberId),
+      { name }
+    );
   },
 
-  // 更多 Firestore 實作...
-  getState: () => {
-    const stored = localStorage.getItem('nordic_trip_data');
-    if (stored) return JSON.parse(stored);
-    return {
-      todos: [], packing: [], shopping: [], expenses: [], members: [], bookings: []
-    };
-  }
+  remove: async (memberId: string) => {
+    await deleteDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "members", memberId)
+    );
+  },
+};
+
+/* =========================
+   Expenses
+========================= */
+
+export const expensesService = {
+  subscribe: (callback: (expenses: Expense[]) => void) => {
+    const q = query(
+      collection(db, "trips", DEFAULT_TRIP_ID, "expenses"),
+      orderBy("createdAt", "desc")
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const expenses = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Expense[];
+
+      callback(expenses);
+    });
+  },
+
+  add: async (expense: Omit<Expense, "id">) => {
+    await addDoc(
+      collection(db, "trips", DEFAULT_TRIP_ID, "expenses"),
+      {
+        ...expense,
+        createdAt: serverTimestamp(),
+      }
+    );
+  },
+
+  update: async (
+    expenseId: string,
+    data: Partial<Expense>
+  ) => {
+    await updateDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "expenses", expenseId),
+      data
+    );
+  },
+
+  remove: async (expenseId: string) => {
+    await deleteDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "expenses", expenseId)
+    );
+  },
+};
+
+/* =========================
+   Schedules / Bookings
+========================= */
+
+export const schedulesService = {
+  subscribe: (
+    callback: (grouped: Record<string, Booking[]>) => void
+  ) => {
+    const q = query(
+      collection(db, "trips", DEFAULT_TRIP_ID, "schedules"),
+      orderBy("time", "asc")
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const grouped: Record<string, Booking[]> = {};
+
+      snapshot.docs.forEach((doc) => {
+        const item = {
+          id: doc.id,
+          ...doc.data(),
+        } as Booking;
+
+        if (!grouped[item.date]) grouped[item.date] = [];
+        grouped[item.date].push(item);
+      });
+
+      callback(grouped);
+    });
+  },
+
+  add: async (booking: Omit<Booking, "id">) => {
+    await addDoc(
+      collection(db, "trips", DEFAULT_TRIP_ID, "schedules"),
+      {
+        ...booking,
+        createdAt: serverTimestamp(),
+      }
+    );
+  },
+
+  update: async (
+    bookingId: string,
+    data: Partial<Booking>
+  ) => {
+    await updateDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "schedules", bookingId),
+      data
+    );
+  },
+
+  remove: async (bookingId: string) => {
+    await deleteDoc(
+      doc(db, "trips", DEFAULT_TRIP_ID, "schedules", bookingId)
+    );
+  },
 };
