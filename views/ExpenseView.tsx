@@ -314,9 +314,6 @@ const unsubExpenses = dbService.subscribeExpenses((data) => {
     // ✅ 關鍵：使用展開運算子 [...] 建立新物件，強制 React 刷新畫面
     setExpenses([...data]); 
   });
-
-  return () => unsubExpenses();
-}, []);
   
   // 監聽結算
   const unsubArchived = dbService.subscribeArchivedSettlements((data) => {
