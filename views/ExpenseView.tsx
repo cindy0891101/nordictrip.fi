@@ -338,6 +338,24 @@ useEffect(() => {
     }
   };
 
+  const handleDeleteExpense = async (id: string) => {
+  if (!window.confirm("確定要刪除這筆支出嗎？")) return;
+
+  try {
+    // 1. 呼叫 Firebase 刪除
+    await dbService.deleteExpense(id);
+    
+    // 2. 關閉編輯視窗
+    setShowEdit(false);
+    
+    // 💡 再次提醒：這裡不需要 setExpenses，因為 useEffect 的 subscribe 會自動同步更新畫面
+    console.log("✅ 雲端刪除成功");
+  } catch (error) {
+    console.error("❌ 刪除失敗:", error);
+    alert("雲端同步失敗");
+  }
+};
+  
   const handleAddExpense = async () => { // 1. 加上 async
     if (!formData.amount || formData.splitWith.length === 0) return;
     const exp: Expense = {
@@ -932,7 +950,9 @@ useEffect(() => {
           </div>
 
           <div className="flex gap-4 pt-4">
-            <button onClick={() => { setExpenses(expenses.filter(e => e.id !== formData.id)); setShowEdit(false); }} className="flex-1 h-16 bg-terracotta text-white rounded-3xl shadow-lg active:scale-95 transition-all"><i className="fa-solid fa-trash"></i></button>
+           <button onClick={() => handleDeleteExpense(formData.id)} className="flex-1 h-16 bg-terracotta text-white rounded-3xl shadow-lg active:scale-95 transition-all">
+             <i className="fa-solid fa-trash"></i>
+             </button>
             <button onClick={handleUpdateExpense} className="flex-1 h-16 bg-sage text-white rounded-3xl font-bold shadow-lg active:scale-95 transition-all">儲存修改</button>
           </div>
         </div>
