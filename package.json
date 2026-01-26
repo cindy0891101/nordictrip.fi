@@ -8,11 +8,11 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "firebase": "^12.8.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
-  },
+ "dependencies": {
+  "firebase": "^10.7.1",
+  "react": "^19.2.3",
+  "react-dom": "^19.2.3"
+ },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
