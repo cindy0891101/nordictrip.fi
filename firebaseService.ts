@@ -63,8 +63,14 @@ export const dbService = {
     });
   },
 
-saveExpense: async (expense: Expense) => { ... }, // 這裡要有逗號
-
+saveExpense: async (expense: Expense) => {
+    if (expense.id && expense.id.length > 15) {
+      await setDoc(doc(db, 'expenses', expense.id), { ...expense, updatedAt: new Date() });
+    } else {
+      const { id, ...dataWithoutId } = expense; // 避免把空的 id 存進欄位
+      await addDoc(collection(db, 'expenses'), { ...dataWithoutId, createdAt: new Date() });
+    }
+  },
   deleteExpense: async (id: string) => { // 改成這種 key: value 寫法比較整齊
     try {
       const docRef = doc(db, 'expenses', id);
