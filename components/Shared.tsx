@@ -10,8 +10,15 @@ export const NordicCard: React.FC<{ children: React.ReactNode; className?: strin
   </div>
 );
 
-export const NordicButton: React.FC<{ children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'danger'; className?: string }> = ({ 
-  children, onClick, variant = 'primary', className = '' 
+// Added disabled prop to NordicButton to fix TypeScript error in views/ExpenseView.tsx
+export const NordicButton: React.FC<{ 
+  children: React.ReactNode; 
+  onClick?: () => void; 
+  variant?: 'primary' | 'secondary' | 'danger'; 
+  className?: string;
+  disabled?: boolean;
+}> = ({ 
+  children, onClick, variant = 'primary', className = '', disabled = false 
 }) => {
   const base = "px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2";
   const variants = {
@@ -21,7 +28,11 @@ export const NordicButton: React.FC<{ children: React.ReactNode; onClick?: () =>
   };
   
   return (
-    <button onClick={onClick} className={`${base} ${variants[variant]} ${className}`}>
+    <button 
+      onClick={onClick} 
+      className={`${base} ${variants[variant]} ${className}`}
+      disabled={disabled}
+    >
       {children}
     </button>
   );
