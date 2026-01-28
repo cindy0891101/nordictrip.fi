@@ -6,32 +6,46 @@ import ExpenseView from './views/ExpenseView';
 import PlanningView from './views/PlanningView';
 import MembersView from './views/MembersView';
 import { Modal, NordicButton } from './components/Shared';
-import { membersService } from './firebaseService';
 import { Member } from './types';
+import { dbService } from './firebaseService';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'bookings' | 'expense' | 'planning' | 'members'>('schedule');
   const [isEditMode, setIsEditMode] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
+  const [members, setMembers] = useState<Member[]>([]);
+  const [sharedDriveUrl, setSharedDriveUrl] = useState<string>('');
 
-const [members, setMembers] = useState<Member[]>([]);
+  useEffect(() => {
+    dbService.initAuth().catch(() => console.log("Auth initialized in local mode"));
+  }, []);
 
-useEffect(() => {
-  const unsubscribe = membersService.subscribe((membersFromDb) => {
-    setMembers(
-      membersFromDb.map((m) => ({
-        ...m,
-        avatar:
-          m.avatar ||
-          `https://picsum.photos/seed/${m.id}/100/100`,
-      }))
-    );
-  });
+  useEffect(() => {
+    const unsubscribeMembers = dbService.subscribeField('members', (data) => {
+      if (data && Array.isArray(data)) {
+        setMembers(data);
+      } else if (data === undefined) {
+        // 初始狀態為空陣列
+        dbService.updateField('members', []);
+      }
+    });
+    
+    const unsubscribeDrive = dbService.subscribeField('sharedDriveUrl', (data) => {
+      setSharedDriveUrl(data || '');
+    });
+    
+    return () => {
+      if (typeof unsubscribeMembers === 'function') unsubscribeMembers();
+      if (typeof unsubscribeDrive === 'function') unsubscribeDrive();
+    };
+  }, []);
 
-  return () => unsubscribe();
-}, []);
-  
+  const saveMembersToCloud = (updatedMembers: Member[]) => {
+    setMembers(updatedMembers);
+    dbService.updateField('members', updatedMembers);
+  };
+
   const handleToggleLock = () => {
     if (isEditMode) {
       setIsEditMode(false);
@@ -51,42 +65,50 @@ useEffect(() => {
     }
   };
 
-const addMember = async (name: string) => {
-  await membersService.add(name);
-};
-  
-const deleteMember = async (id: string) => {
-  if (members.length <= 1) {
-    alert('旅程至少需要一位成員！');
-    return;
-  }
-  await membersService.remove(id);
-};
+  const addMember = (name: string) => {
+    const newMember: Member = {
+      id: Date.now().toString(),
+      name,
+      title: 'Adventure Buddy',
+      avatar: `https://picsum.photos/seed/${Math.random()}/100/100`
+    };
+    saveMembersToCloud([...members, newMember]);
+  };
 
-const updateMemberAvatar = (id: string, avatar: string) => {
-  setMembers((prev) =>
-    prev.map((m) => (m.id === id ? { ...m, avatar } : m))
-  );
-};
-const updateMemberName = async (id: string, name: string) => {
-  await membersService.updateName(id, name);
-};
+  const deleteMember = (id: string) => {
+    const nextMembers = members.filter(m => m.id !== id);
+    saveMembersToCloud(nextMembers);
+  };
 
+  const updateMemberAvatar = (id: string, avatar: string) => {
+    saveMembersToCloud(members.map(m => m.id === id ? { ...m, avatar } : m));
+  };
+
+  const updateMemberInfo = (id: string, name: string, title: string) => {
+    saveMembersToCloud(members.map(m => m.id === id ? { ...m, name, title } : m));
+  };
+
+  const updateSharedDriveUrl = (url: string) => {
+    setSharedDriveUrl(url);
+    dbService.updateField('sharedDriveUrl', url);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'schedule': return <ScheduleView isEditMode={isEditMode} />;
       case 'bookings': return <BookingsView isEditMode={isEditMode} />;
-      case 'expense': return <ExpenseView members={members} />;
-      case 'planning': return <PlanningView members={members} />;
+      case 'expense': return <ExpenseView members={members || []} />;
+      case 'planning': return <PlanningView members={members || []} />;
       case 'members': return (
         <MembersView 
-          members={members} 
+          members={members || []} 
           onAddMember={addMember} 
           onUpdateAvatar={updateMemberAvatar}
           onDeleteMember={deleteMember}
-          onUpdateName={updateMemberName}
+          onUpdateMemberInfo={updateMemberInfo}
           isEditMode={isEditMode}
+          driveUrl={sharedDriveUrl}
+          onUpdateDriveUrl={updateSharedDriveUrl}
         />
       );
       default: return <ScheduleView isEditMode={isEditMode} />;
@@ -101,7 +123,6 @@ const updateMemberName = async (id: string, name: string) => {
     { id: 'members', icon: 'fa-user-group', label: '成員' }
   ];
 
-  // 判斷當前頁面是否需要顯示鎖頭按鈕 (行程、預訂、成員清單需要)
   const showLockButton = activeTab === 'schedule' || activeTab === 'bookings' || activeTab === 'members';
 
   return (

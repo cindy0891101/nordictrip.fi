@@ -1,190 +1,109 @@
-import { initializeApp } from "firebase/app";
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  onSnapshot,
-  serverTimestamp,
-  query,
-  orderBy,
-  doc,
-} from "firebase/firestore";
 
-import { Member, Expense, Booking } from "./types";
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
+  setDoc,
+  getDoc,
+  Firestore
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
-/* =========================
-   Firebase 初始化
-========================= */
+const IS_PLACEHOLDER_CONFIG = (config: any) => config.apiKey.includes("FakeKey") || config.projectId.includes("demo");
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSy" + "FakeKeyForDemoPurposeOnly", 
+  authDomain: "nordictrip-demo.firebaseapp.com",
+  projectId: "nordictrip-demo",
+  storageBucket: "nordictrip-demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const DEFAULT_TRIP_ID = 'trip_2025_nordic_master';
 
-/* =========================
-   共用 tripId（暫時）
-   之後可換成動態
-========================= */
-
-const DEFAULT_TRIP_ID = "default-trip";
-
-/* =========================
-   Members
-========================= */
-
-export const membersService = {
-  subscribe: (callback: (members: Member[]) => void) => {
-    const colRef = collection(
-      db,
-      "trips",
-      DEFAULT_TRIP_ID,
-      "members"
-    );
-
-    return onSnapshot(colRef, (snapshot) => {
-      const members = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Member[];
-
-      callback(members);
-    });
-  },
-
-  add: async (name: string) => {
-    await addDoc(
-      collection(db, "trips", DEFAULT_TRIP_ID, "members"),
-      {
-        name,
-        createdAt: serverTimestamp(),
-      }
-    );
-  },
-
-  updateName: async (memberId: string, name: string) => {
-    await updateDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "members", memberId),
-      { name }
-    );
-  },
-
-  remove: async (memberId: string) => {
-    await deleteDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "members", memberId)
-    );
-  },
+// --- 改進的 Mock Logic：具備存儲功能的模擬雲端 ---
+const mockDb = {
+  data: {} as Record<string, any>, // 這裡儲存當前所有欄位的資料
+  listeners: [] as Array<{field: string, callback: (data: any) => void}>,
+  
+  save: (field: string, value: any) => {
+    mockDb.data[field] = value;
+    window.dispatchEvent(new CustomEvent('nordic_data_update', { detail: { field, value } }));
+  }
 };
 
-/* =========================
-   Expenses
-========================= */
+window.addEventListener('nordic_data_update', (e: any) => {
+  const { field, value } = e.detail;
+  mockDb.listeners.forEach(l => {
+    if (l.field === field) l.callback(value);
+  });
+});
 
-export const expensesService = {
-  subscribe: (callback: (expenses: Expense[]) => void) => {
-    const q = query(
-      collection(db, "trips", DEFAULT_TRIP_ID, "expenses"),
-      orderBy("createdAt", "desc")
-    );
+let db: Firestore | null = null;
+let auth: Auth | null = null;
+let useFirebase = false;
 
-    return onSnapshot(q, (snapshot) => {
-      const expenses = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Expense[];
+try {
+  if (!IS_PLACEHOLDER_CONFIG(firebaseConfig)) {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    useFirebase = true;
+  }
+} catch (e) {
+  console.error("Firebase initialization failed", e);
+}
 
-      callback(expenses);
-    });
-  },
-
-  add: async (expense: Omit<Expense, "id">) => {
-    await addDoc(
-      collection(db, "trips", DEFAULT_TRIP_ID, "expenses"),
-      {
-        ...expense,
-        createdAt: serverTimestamp(),
-      }
-    );
-  },
-
-  update: async (
-    expenseId: string,
-    data: Partial<Expense>
-  ) => {
-    await updateDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "expenses", expenseId),
-      data
-    );
-  },
-
-  remove: async (expenseId: string) => {
-    await deleteDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "expenses", expenseId)
-    );
-  },
-};
-
-/* =========================
-   Schedules / Bookings
-========================= */
-
-export const schedulesService = {
-  subscribe: (
-    callback: (grouped: Record<string, Booking[]>) => void
-  ) => {
-    const q = query(
-      collection(db, "trips", DEFAULT_TRIP_ID, "schedules"),
-      orderBy("time", "asc")
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const grouped: Record<string, Booking[]> = {};
-
-      snapshot.docs.forEach((doc) => {
-        const item = {
-          id: doc.id,
-          ...doc.data(),
-        } as Booking;
-
-        if (!grouped[item.date]) grouped[item.date] = [];
-        grouped[item.date].push(item);
+export const dbService = {
+  initAuth: async () => {
+    if (!useFirebase || !auth) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      onAuthStateChanged(auth!, (user) => {
+        if (!user) {
+          signInAnonymously(auth!).catch(e => console.error("Auth error", e));
+        }
+        resolve(user);
       });
-
-      callback(grouped);
     });
   },
 
-  add: async (booking: Omit<Booking, "id">) => {
-    await addDoc(
-      collection(db, "trips", DEFAULT_TRIP_ID, "schedules"),
-      {
-        ...booking,
-        createdAt: serverTimestamp(),
+  subscribeField: (field: string, callback: (data: any) => void) => {
+    if (useFirebase && db) {
+      const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
+      return onSnapshot(tripRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          // 如果 Snapshot 存在但欄位不存在，傳回 undefined
+          callback(data[field]);
+        } else {
+          callback(undefined);
+        }
+      });
+    } else {
+      // 立即回傳目前已有的模擬數據
+      if (mockDb.data[field] !== undefined) {
+        callback(mockDb.data[field]);
       }
-    );
+      
+      const listener = { field, callback };
+      mockDb.listeners.push(listener);
+      return () => {
+        mockDb.listeners = mockDb.listeners.filter(l => l !== listener);
+      };
+    }
   },
 
-  update: async (
-    bookingId: string,
-    data: Partial<Booking>
-  ) => {
-    await updateDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "schedules", bookingId),
-      data
-    );
-  },
-
-  remove: async (bookingId: string) => {
-    await deleteDoc(
-      doc(db, "trips", DEFAULT_TRIP_ID, "schedules", bookingId)
-    );
-  },
+  updateField: async (field: string, value: any) => {
+    mockDb.save(field, value); // 更新本地模擬存儲
+    if (useFirebase && db) {
+      const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
+      try {
+        await setDoc(tripRef, { [field]: value }, { merge: true });
+      } catch (e) {
+        console.error(`Firebase write error for ${field}:`, e);
+      }
+    }
+  }
 };

@@ -1,6 +1,7 @@
+
 export type Category = 'Attraction' | 'Food' | 'Transport' | 'Accommodation' | 'Activity' | 'Shopping';
 export type BookingType = 'flight' | 'hotel' | 'activity' | 'ticket';
-export type PackingCategory = 'Essential' | 'Gadgets' | 'Clothing' | 'Beauty' | 'Others';
+export type PackingCategory = 'Essential' | 'Gadgets' | 'Clothing' | 'Beauty' | 'Daily' | 'Others';
 
 export interface ScheduleItem {
   id: string;
@@ -28,7 +29,27 @@ export interface Booking {
   type: BookingType;
   title: string;
   date: string;
-  details: any;
+  details: {
+    // 飛行資訊
+    from?: string;
+    to?: string;
+    depTime?: string;
+    arrTime?: string;
+    flightNo?: string;
+    terminal?: string;
+    cabinClass?: string; // 艙等 (經濟、商務...)
+    
+    // 飯店/活動/交通票共通
+    address?: string;
+    checkIn?: string;
+    checkOut?: string;
+    time?: string;
+    voucherUrl?: string;
+    info?: string;
+    image?: string;
+    seat?: string;
+    attachment?: string;
+  };
   price: number;
   currency: string;
 }
@@ -49,13 +70,14 @@ export interface Member {
   id: string;
   name: string;
   avatar: string;
+  title?: string; // 新增：稱號
 }
 
 export interface TodoItem {
   id: string;
   text: string;
   completed: boolean;
-  assignedTo: string;
+  assignedTo: string; // Member ID or 'ALL'
 }
 
 export interface ChecklistItem {
