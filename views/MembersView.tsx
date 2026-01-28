@@ -8,8 +8,10 @@ interface MembersViewProps {
   onAddMember: (name: string) => void;
   onUpdateAvatar: (id: string, avatar: string) => void;
   onDeleteMember: (id: string) => void;
-  onUpdateName: (id: string, name: string) => void;
+  onUpdateMemberInfo: (id: string, name: string, title: string) => void;
   isEditMode: boolean;
+  driveUrl: string;
+  onUpdateDriveUrl: (url: string) => void;
 }
 
 const MembersView: React.FC<MembersViewProps> = ({ 
@@ -17,13 +19,21 @@ const MembersView: React.FC<MembersViewProps> = ({
   onAddMember, 
   onUpdateAvatar, 
   onDeleteMember,
-  onUpdateName,
-  isEditMode 
+  onUpdateMemberInfo,
+  isEditMode,
+  driveUrl,
+  onUpdateDriveUrl
 }) => {
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+  const [showDriveModal, setShowDriveModal] = useState(false);
   const [newName, setNewName] = useState('');
+  
+  // 編輯成員資訊用狀態
   const [editNameValue, setEditNameValue] = useState('');
+  const [editTitleValue, setEditTitleValue] = useState('');
+  
+  const [driveUrlInput, setDriveUrlInput] = useState(driveUrl);
   const [currentEditId, setCurrentEditId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,16 +45,15 @@ const MembersView: React.FC<MembersViewProps> = ({
     }
   };
 
-  const handleUpdateNameSubmit = () => {
+  const handleUpdateMemberSubmit = () => {
     if (currentEditId && editNameValue.trim()) {
-      onUpdateName(currentEditId, editNameValue.trim());
-      setShowEditNameModal(false);
+      onUpdateMemberInfo(currentEditId, editNameValue.trim(), editTitleValue.trim());
+      setShowEditMemberModal(false);
       setCurrentEditId(null);
     }
   };
 
   const handleCameraClick = (id: string) => {
-    if (!isEditMode) return;
     setCurrentEditId(id);
     fileInputRef.current?.click();
   };
@@ -60,6 +69,19 @@ const MembersView: React.FC<MembersViewProps> = ({
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleDriveClick = () => {
+    if (driveUrl) {
+      window.open(driveUrl, '_blank');
+    } else if (!isEditMode) {
+      alert('尚未設定雲端連結，請聯絡管理員設定。');
+    }
+  };
+
+  const handleSaveDriveUrl = () => {
+    onUpdateDriveUrl(driveUrlInput);
+    setShowDriveModal(false);
   };
 
   return (
@@ -79,29 +101,25 @@ const MembersView: React.FC<MembersViewProps> = ({
 
       <div className="grid grid-cols-2 gap-4">
         {members.map(member => (
-          <NordicCard key={member.id} className="text-center py-8 relative group overflow-visible">
-            {/* 刪除按鈕：僅在編輯模式顯示 */}
+          <NordicCard key={member.id} className="text-center py-5 relative group overflow-visible">
             {isEditMode && (
               <button 
                 onClick={(e) => { e.stopPropagation(); onDeleteMember(member.id); }}
-                className="absolute -top-2 -right-2 w-7 h-7 bg-terracotta text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all z-10"
+                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-terracotta text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all z-10"
               >
-                <i className="fa-solid fa-xmark text-xs"></i>
+                <i className="fa-solid fa-trash-can text-[9px]"></i>
               </button>
             )}
 
-            <div className="relative inline-block mb-3">
-              <img src={member.avatar} className="w-24 h-24 rounded-full border-4 border-slate shadow-inner object-cover" alt={member.name} />
+            <div className="relative inline-block mb-2">
+              <img src={member.avatar} className="w-16 h-16 rounded-full border-[3px] border-slate shadow-inner object-cover" alt={member.name} />
               
-              {/* 相機圖示：僅在編輯模式顯示 */}
-              {isEditMode && (
-                <div 
-                  onClick={(e) => { e.stopPropagation(); handleCameraClick(member.id); }}
-                  className="absolute bottom-0 right-0 bg-sage text-white w-8 h-8 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all shadow-md"
-                >
-                  <i className="fa-solid fa-camera text-xs"></i>
-                </div>
-              )}
+              <div 
+                onClick={(e) => { e.stopPropagation(); handleCameraClick(member.id); }}
+                className="absolute bottom-0 right-0 bg-sage text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all shadow-md"
+              >
+                <i className="fa-solid fa-camera text-[8px]"></i>
+              </div>
             </div>
 
             <div 
@@ -109,32 +127,62 @@ const MembersView: React.FC<MembersViewProps> = ({
                 if (isEditMode) {
                   setCurrentEditId(member.id);
                   setEditNameValue(member.name);
-                  setShowEditNameModal(true);
+                  setEditTitleValue(member.title || '');
+                  setShowEditMemberModal(true);
                 }
               }}
               className={`group/name flex flex-col items-center ${isEditMode ? 'cursor-pointer' : ''}`}
             >
-              <h3 className="text-xl font-bold text-sage flex items-center gap-1.5">
+              <h3 className="text-sm font-bold text-sage flex items-center gap-1">
                 {member.name}
-                {isEditMode && <i className="fa-solid fa-pen text-[10px] opacity-0 group-hover/name:opacity-100 transition-opacity"></i>}
+                {isEditMode && <i className="fa-solid fa-pen text-[8px] opacity-0 group-hover/name:opacity-100 transition-opacity"></i>}
               </h3>
-              <span className="text-[10px] text-earth-dark font-bold uppercase tracking-widest block mt-1">Adventure Buddy</span>
+              <span className="text-[8px] text-earth-dark font-bold uppercase tracking-widest block mt-0.5 opacity-60">
+                {member.title || 'Buddy'}
+              </span>
             </div>
           </NordicCard>
         ))}
         
-        {/* 新增旅伴卡片：僅在編輯模式顯示 */}
-        {isEditMode && (
-          <NordicCard 
-            onClick={() => setShowInviteModal(true)}
-            className="border-2 border-dashed border-earth bg-white/30 flex flex-col items-center justify-center py-8 opacity-60 hover:opacity-100 transition-opacity"
-          >
-            <div className="w-16 h-16 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-2">
-              <i className="fa-solid fa-user-plus text-earth"></i>
-            </div>
-            <span className="text-sm font-bold text-earth">邀請新旅伴</span>
-          </NordicCard>
-        )}
+        <NordicCard 
+          onClick={() => setShowInviteModal(true)}
+          className="border-2 border-dashed border-earth bg-white/40 flex flex-col items-center justify-center py-5 hover:bg-white hover:border-sage transition-all shadow-sm"
+        >
+          <div className="w-10 h-10 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-1">
+            <i className="fa-solid fa-user-plus text-earth text-xs"></i>
+          </div>
+          <span className="text-[10px] font-bold text-earth">邀請旅伴</span>
+        </NordicCard>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <h3 className="font-bold text-sage px-2 flex justify-between items-center">
+          群組共同檔案
+          {isEditMode && (
+            <button 
+              onClick={() => { setDriveUrlInput(driveUrl); setShowDriveModal(true); }}
+              className="text-[10px] bg-sage/10 px-3 py-1 rounded-full text-sage hover:bg-sage hover:text-white transition-all"
+            >
+              <i className="fa-solid fa-link mr-1"></i> 設定連結
+            </button>
+          )}
+        </h3>
+        
+        <NordicCard 
+          onClick={handleDriveClick}
+          className={`flex items-center gap-4 group transition-all ${driveUrl ? 'hover:border-sage' : ''}`}
+        >
+          <div className="w-12 h-12 rounded-xl bg-harbor/20 text-harbor flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+            <i className="fa-brands fa-google-drive"></i>
+          </div>
+          <div className="flex-grow">
+            <h4 className="font-bold text-sage">共享雲端硬碟</h4>
+            <p className="text-xs text-earth-dark font-bold">
+              {driveUrl ? '點擊查看所有的行程照片' : '尚未設定雲端連結'}
+            </p>
+          </div>
+          <i className={`fa-solid ${driveUrl ? 'fa-arrow-up-right-from-square' : 'fa-chevron-right'} text-earth-dark text-xs`}></i>
+        </NordicCard>
       </div>
 
       <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="邀請新旅伴">
@@ -146,7 +194,7 @@ const MembersView: React.FC<MembersViewProps> = ({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="輸入姓名..."
-              className="w-full p-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage outline-none"
+              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
               autoFocus
             />
           </div>
@@ -156,37 +204,60 @@ const MembersView: React.FC<MembersViewProps> = ({
         </div>
       </Modal>
 
-      <Modal isOpen={showEditNameModal} onClose={() => setShowEditNameModal(false)} title="修改旅伴姓名">
-        <div className="space-y-4">
+      <Modal isOpen={showEditMemberModal} onClose={() => setShowEditMemberModal(false)} title="修改成員資訊">
+        <div className="space-y-5">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">新姓名</label>
+            <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">成員姓名</label>
             <input 
               type="text" 
               value={editNameValue}
               onChange={(e) => setEditNameValue(e.target.value)}
-              className="w-full p-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage outline-none"
+              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
               autoFocus
             />
           </div>
-          <NordicButton onClick={handleUpdateNameSubmit} className="w-full py-4">
-            更新姓名
-          </NordicButton>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">成員稱號</label>
+            <input 
+              type="text" 
+              value={editTitleValue}
+              onChange={(e) => setEditTitleValue(e.target.value)}
+              placeholder="例如：專業導航、美食專家..."
+              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
+            />
+          </div>
+          <div className="pt-2">
+            <NordicButton onClick={handleUpdateMemberSubmit} className="w-full py-4">
+              儲存資訊
+            </NordicButton>
+            <button 
+              onClick={() => { if(currentEditId) { onDeleteMember(currentEditId); setShowEditMemberModal(false); } }}
+              className="w-full py-3 mt-2 text-stamp font-bold text-[10px] uppercase tracking-widest hover:underline"
+            >
+              <i className="fa-solid fa-user-minus mr-2"></i> 移除此成員
+            </button>
+          </div>
         </div>
       </Modal>
 
-      <div className="mt-8 space-y-4">
-        <h3 className="font-bold text-sage px-2">群組共同檔案</h3>
-        <NordicCard className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-morandi-blue/20 text-morandi-blue flex items-center justify-center text-xl">
-            <i className="fa-solid fa-folder-open"></i>
+      <Modal isOpen={showDriveModal} onClose={() => setShowDriveModal(false)} title="設定雲端連結">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">Google Drive 網址</label>
+            <textarea 
+              value={driveUrlInput}
+              onChange={(e) => setDriveUrlInput(e.target.value)}
+              placeholder="貼上您的共享資料夾網址..."
+              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none min-h-[100px] shadow-sm"
+              autoFocus
+            />
           </div>
-          <div className="flex-grow">
-            <h4 className="font-bold text-sage">共享雲端硬碟</h4>
-            <p className="text-xs text-earth-dark font-bold">點擊查看所有的行程照片</p>
-          </div>
-          <i className="fa-solid fa-chevron-right text-earth-dark"></i>
-        </NordicCard>
-      </div>
+          <p className="text-[10px] text-earth-dark italic px-1">設定完成後，全體旅伴點擊卡片即可開啟此連結。</p>
+          <NordicButton onClick={handleSaveDriveUrl} className="w-full py-4">
+            儲存連結設定
+          </NordicButton>
+        </div>
+      </Modal>
     </div>
   );
 };

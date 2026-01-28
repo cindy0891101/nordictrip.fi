@@ -1,14 +1,19 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { NordicCard, NordicButton, Modal } from '../components/Shared';
 import { CURRENCIES as INITIAL_CURRENCIES, CATEGORY_COLORS } from '../constants';
 import { Expense, Member } from '../types';
+import { dbService } from '../firebaseService';
 
-interface ArchivedSettlement {
-  id: string;
-  from: string;
-  to: string;
+interface Repayment {
+  fromId: string;
+  toId: string;
   amount: number;
+  expenseId?: string;
+}
+
+interface ArchivedSettlement extends Repayment {
+  id: string;
   date: string;
 }
 
@@ -16,781 +21,888 @@ interface ExpenseViewProps {
   members: Member[];
 }
 
+const CATEGORIES = [
+  { id: 'Food', label: '餐飲', icon: 'fa-utensils' },
+  { id: 'Transport', label: '交通', icon: 'fa-car-side' },
+  { id: 'Shopping', label: '購物', icon: 'fa-bag-shopping' },
+  { id: 'Accommodation', label: '住宿', icon: 'fa-bed' },
+  { id: 'Ticket', label: '票券', icon: 'fa-ticket' },
+  { id: 'Activity', label: '活動', icon: 'fa-star' },
+  { id: 'Others', label: '其他', icon: 'fa-tags' }
+];
+
+// 定義符合 Nordic 奶油風的主題色 Hex 碼，用於 SVG 渲染
+const CATEGORY_HEX: Record<string, string> = {
+  Food: '#D2C2B2',          // Aged Paper
+  Transport: '#8E9CA3',     // Faded Steel
+  Shopping: '#DC8670',      // Stamp Red (Warm Coral)
+  Accommodation: '#2B2C2B', // Ink Charcoal
+  Activity: '#577C8E',      // Harbor Blue
+  Attraction: '#577C8E',    // Harbor Blue
+  Ticket: '#577C8E',        // Harbor Blue
+  Others: '#8E9CA3'         // Faded Steel
+};
+
+// 優化後的圓餅圖組件
+const DonutChart: React.FC<{ data: { label: string, value: number, color: string }[] }> = ({ data }) => {
+  const total = data.reduce((acc, curr) => acc + curr.value, 0);
+  let currentPercentage = 0;
+
+  return (
+    <div className="relative w-56 h-56 mx-auto flex items-center justify-center">
+      <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90 drop-shadow-sm">
+        {/* 背景底環 */}
+        <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F3EBE3" strokeWidth="3.2" />
+        
+        {total === 0 ? (
+          <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F3EBE3" strokeWidth="3.2" />
+        ) : (
+          data.map((item, idx) => {
+            const percentage = (item.value / total) * 100;
+            const strokeDasharray = `${percentage} ${100 - percentage}`;
+            const strokeDashoffset = -currentPercentage;
+            currentPercentage += percentage;
+            return (
+              <circle
+                key={idx}
+                cx="18"
+                cy="18"
+                r="15.915"
+                fill="transparent"
+                stroke={item.color}
+                strokeWidth="3.8"
+                strokeDasharray={strokeDasharray}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap={percentage > 2 ? "round" : "butt"}
+                className="transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              />
+            );
+          })
+        )}
+      </svg>
+      {/* 圓心文字資訊 */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-[10px] font-bold text-earth-dark/50 uppercase tracking-[0.2em] mb-0.5">Total Expenses</span>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[10px] font-bold text-harbor/60">NT$</span>
+          <span className="text-xl font-bold text-ink tracking-tighter">
+            {total.toLocaleString()}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
-  const myID = '1';
-  
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>([]);
+  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>(INITIAL_CURRENCIES);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+
+  useEffect(() => {
+    const unsubExp = dbService.subscribeField('expenses', (data) => setExpenses(data || []));
+    const unsubArch = dbService.subscribeField('archivedSettlements', (data) => setArchivedSettlements(data || []));
+    const unsubRates = dbService.subscribeField('currencyRates', (data) => {
+      if (data && typeof data === 'object') setCurrencyRates(data as Record<string, number>);
+    });
+    return () => { unsubExp(); unsubArch(); unsubRates(); };
+  }, []);
+
   const [showAdd, setShowAdd] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
-  const [showCalc, setShowCalc] = useState(false);
-  const [showManageRates, setShowManageRates] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [showSettlement, setShowSettlement] = useState(false);
-  const [showChart, setShowChart] = useState(false);
-  
-  const [clearedSplits, setClearedSplits] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('nordic_cleared_splits');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [showRateManager, setShowRateManager] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  const [archivedSettlements, setArchivedSettlements] = useState<ArchivedSettlement[]>(() => {
-    const saved = localStorage.getItem('nordic_archived_settlements');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [analysisMemberId, setAnalysisMemberId] = useState<string | 'TEAM'>('TEAM');
+  const [drillDownCategory, setDrillDownCategory] = useState<string | null>(null);
 
-  const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<string | null>(null);
+  const [calcDisplay, setCalcDisplay] = useState('0');
+  const [calcSourceCurrency, setCalcSourceCurrency] = useState('EUR');
+  const [calcTargetCurrency, setCalcTargetCurrency] = useState('TWD');
+  const [calcPendingOp, setCalcPendingOp] = useState<string | null>(null);
+  const [calcStoredValue, setCalcStoredValue] = useState<number | null>(null);
 
+  const [newCurrencyCode, setNewCurrencyCode] = useState('');
+  const [newCurrencyRate, setNewCurrencyRate] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<string>(() => localStorage.getItem('nordic_last_sync') || '尚未同步');
-
-  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('nordic_currency_rates');
-    return saved ? JSON.parse(saved) : INITIAL_CURRENCIES;
-  });
-
-  // 保存匯率變動
-  useEffect(() => {
-    localStorage.setItem('nordic_currency_rates', JSON.stringify(currencyRates));
-  }, [currencyRates]);
-
-  useEffect(() => {
-    localStorage.setItem('nordic_last_sync', lastSync);
-    localStorage.setItem('nordic_cleared_splits', JSON.stringify(clearedSplits));
-    localStorage.setItem('nordic_archived_settlements', JSON.stringify(archivedSettlements));
-  }, [lastSync, clearedSplits, archivedSettlements]);
 
   const [formData, setFormData] = useState({ 
-    id: '', 
-    amount: '', 
-    currency: 'TWD', 
-    note: '', 
-    category: 'Food', 
-    payerId: '1', 
-    splitWith: members.map(m => m.id),
+    amount: '', currency: 'TWD', note: '', category: 'Food', 
+    payerId: '', splitWith: [] as string[],
     date: new Date().toISOString().split('T')[0]
   });
 
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  
-  // 計算機狀態
-  const [calcInput, setCalcInput] = useState('0');
-  const [calcCurrency, setCalcCurrency] = useState('EUR');
-  const [isReverseExchange, setIsReverseExchange] = useState(false); 
-  const [calcPrev, setCalcPrev] = useState<number | null>(null);
-  const [calcOp, setCalcOp] = useState<string | null>(null);
-  const [shouldReset, setShouldReset] = useState(false);
+  const totalTeamExpense = useMemo(() => {
+    return Math.round(expenses.reduce((acc, exp) => {
+      if (members.length > 0 && exp.splitWith.length === members.length) {
+        const rate = currencyRates[exp.currency] || 1;
+        return acc + (exp.amount * rate);
+      }
+      return acc;
+    }, 0));
+  }, [expenses, members, currencyRates]);
 
-  const [newRateCode, setNewRateCode] = useState('');
-  const [newRateValue, setNewRateValue] = useState('');
+  // 分析資料計算 - 優化後的分類計算
+  const analysisData = useMemo(() => {
+    const categoriesSum: Record<string, { total: number, items: Expense[] }> = {};
+    CATEGORIES.forEach(c => categoriesSum[c.id] = { total: 0, items: [] });
 
-  const syncAllRates = useCallback(async () => {
-    if (isSyncing) return;
+    if (analysisMemberId === 'TEAM') {
+      expenses.forEach(exp => {
+        if (exp.splitWith.length === members.length) {
+          const rate = currencyRates[exp.currency] || 1;
+          const val = exp.amount * rate;
+          if (categoriesSum[exp.category]) {
+            categoriesSum[exp.category].total += val;
+            categoriesSum[exp.category].items.push(exp);
+          }
+        }
+      });
+    } else {
+      expenses.forEach(exp => {
+        if (exp.splitWith.includes(analysisMemberId)) {
+          const rate = currencyRates[exp.currency] || 1;
+          const share = (exp.amount * rate) / exp.splitWith.length;
+          if (categoriesSum[exp.category]) {
+            categoriesSum[exp.category].total += share;
+            categoriesSum[exp.category].items.push(exp);
+          }
+        }
+      });
+    }
+
+    const total = Object.values(categoriesSum).reduce((a, b) => a + b.total, 0);
+    const chartData = CATEGORIES.map(c => ({
+      id: c.id,
+      label: c.label,
+      value: Math.round(categoriesSum[c.id].total),
+      percentage: total > 0 ? Math.round((categoriesSum[c.id].total / total) * 100) : 0,
+      color: CATEGORY_HEX[c.id] || '#577C8E',
+      items: categoriesSum[c.id].items
+    })).filter(c => c.value > 0).sort((a, b) => b.value - a.value);
+
+    return { total, chartData };
+  }, [analysisMemberId, expenses, currencyRates, members]);
+
+  const currentBalances = useMemo(() => {
+    const balances: Record<string, number> = {};
+    members.forEach(m => balances[m.id] = 0);
+
+    expenses.forEach(exp => {
+      const rate = currencyRates[exp.currency] || 1;
+      const amountTwd = exp.amount * rate;
+      if (balances[exp.payerId] !== undefined) balances[exp.payerId] += amountTwd;
+      const share = amountTwd / exp.splitWith.length;
+      exp.splitWith.forEach(id => {
+        if (balances[id] !== undefined) balances[id] -= share;
+      });
+    });
+
+    archivedSettlements.forEach(s => {
+      if (balances[s.fromId] !== undefined) balances[s.fromId] += s.amount;
+      if (balances[s.toId] !== undefined) balances[s.toId] -= s.amount;
+    });
+
+    return balances;
+  }, [expenses, archivedSettlements, members, currencyRates]);
+
+  const memberLastGlobalSettlementTimes = useMemo(() => {
+    const times: Record<string, number> = {};
+    members.forEach(m => {
+      const userGlobalSettlements = archivedSettlements.filter(s => !s.expenseId && s.fromId === m.id);
+      if (userGlobalSettlements.length > 0) {
+        times[m.id] = Math.max(...userGlobalSettlements.map(s => new Date(s.date).getTime()));
+      } else {
+        times[m.id] = 0;
+      }
+    });
+    return times;
+  }, [archivedSettlements, members]);
+
+  const settlementData = useMemo(() => {
+    const debtors = (Object.entries(currentBalances) as [string, number][]).filter(([_, b]) => b < -0.1).sort((a, b) => a[1] - b[1]);
+    const creditors = (Object.entries(currentBalances) as [string, number][]).filter(([_, b]) => b > 0.1).sort((a, b) => b[1] - a[1]);
+
+    const suggested: Repayment[] = [];
+    let dIdx = 0, cIdx = 0;
+    const dL = debtors.map(d => [...d] as [string, number]);
+    const cL = creditors.map(c => [...c] as [string, number]);
+
+    while (dIdx < dL.length && cIdx < cL.length) {
+      const transfer = Math.min(Math.abs(dL[dIdx][1]), cL[cIdx][1]);
+      suggested.push({ fromId: dL[dIdx][0], toId: cL[cIdx][0], amount: transfer });
+      dL[dIdx][1] += transfer;
+      cL[cIdx][1] -= transfer;
+      if (Math.abs(dL[dIdx][1]) < 0.1) dIdx++;
+      if (Math.abs(cL[cIdx][1]) < 0.1) cIdx++;
+    }
+    return suggested;
+  }, [currentBalances]);
+
+  const handleCalcInput = (val: string) => {
+    if (val === '.') {
+      if (calcDisplay.includes('.')) return;
+      setCalcDisplay(calcDisplay + '.');
+    } else if (calcDisplay === '0') {
+      setCalcDisplay(val);
+    } else {
+      setCalcDisplay(calcDisplay + val);
+    }
+  };
+
+  const handleCalcOp = (op: string) => {
+    setCalcStoredValue(parseFloat(calcDisplay));
+    setCalcPendingOp(op);
+    setCalcDisplay('0');
+  };
+
+  const handleCalcResult = () => {
+    if (calcPendingOp && calcStoredValue !== null) {
+      const current = parseFloat(calcDisplay);
+      let result = 0;
+      switch (calcPendingOp) {
+        case '+': result = calcStoredValue + current; break;
+        case '-': result = calcStoredValue - current; break;
+        case '×': result = calcStoredValue * current; break;
+        case '÷': result = current !== 0 ? calcStoredValue / current : 0; break;
+      }
+      setCalcDisplay(result.toFixed(result % 1 === 0 ? 0 : 2).toString());
+      setCalcPendingOp(null);
+      setCalcStoredValue(null);
+    }
+  };
+
+  const handleCalcBack = () => {
+    if (calcDisplay.length > 1) {
+      setCalcDisplay(calcDisplay.slice(0, -1));
+    } else {
+      setCalcDisplay('0');
+    }
+  };
+
+  const handleCalcSwap = () => {
+    const temp = calcSourceCurrency;
+    setCalcSourceCurrency(calcTargetCurrency);
+    setCalcTargetCurrency(temp);
+  };
+
+  const calcConvertedValue = useMemo(() => {
+    const amount = parseFloat(calcDisplay) || 0;
+    const fromRate = currencyRates[calcSourceCurrency] || 1;
+    const toRate = currencyRates[calcTargetCurrency] || 1;
+    const inTwd = amount * fromRate;
+    return (inTwd / toRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [calcDisplay, calcSourceCurrency, calcTargetCurrency, currencyRates]);
+
+  const handleAddCurrency = () => {
+    if (!newCurrencyCode || !newCurrencyRate) return;
+    const next = { ...currencyRates, [newCurrencyCode.toUpperCase()]: parseFloat(newCurrencyRate) };
+    dbService.updateField('currencyRates', next);
+    setNewCurrencyCode('');
+    setNewCurrencyRate('');
+  };
+
+  const deleteCurrency = (code: string) => {
+    if (code === 'TWD') return;
+    const next = { ...currencyRates };
+    delete next[code];
+    dbService.updateField('currencyRates', next);
+  };
+
+  const syncRates = async () => {
     setIsSyncing(true);
     try {
       const response = await fetch('https://open.er-api.com/v6/latest/TWD');
       const data = await response.json();
-      if (data.result === 'success') {
-        const apiRates = data.rates;
-        setCurrencyRates(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(code => {
-            if (code === 'TWD') return;
-            if (apiRates[code]) {
-              next[code] = parseFloat((1 / apiRates[code]).toFixed(4));
-            }
-          });
-          return next;
+      if (data && data.rates) {
+        const next: Record<string, number> = { TWD: 1 };
+        Object.entries(currencyRates).forEach(([code]) => {
+          if (code === 'TWD') return;
+          if (data.rates[code]) {
+            next[code] = parseFloat((1 / data.rates[code]).toFixed(4));
+          } else {
+            next[code] = currencyRates[code];
+          }
         });
-        setLastSync(new Date().toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }));
+        dbService.updateField('currencyRates', next);
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
     } catch (e) {
-      console.warn("無法取得即時匯率");
+      console.error("同步匯率失敗:", e);
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing]);
+  };
 
   useEffect(() => {
-    if (showCalc) syncAllRates();
-  }, [showCalc, syncAllRates]);
+    if (showCalculator) syncRates();
+  }, [showCalculator]);
 
-  const handleDeleteRate = (code: string) => {
-    if (code === 'TWD') return; 
-    setCurrencyRates(prev => {
-      const next = { ...prev };
-      delete next[code];
-      return next;
-    });
-    if (calcCurrency === code) setCalcCurrency('TWD');
-  };
-
-  const performCalculation = (a: number, b: number, op: string) => {
-    switch (op) {
-      case '+': return a + b;
-      case '-': return a - b;
-      case '*': return a * b;
-      case '/': return b !== 0 ? a / b : a;
-      default: return b;
-    }
-  };
-
-  const handleKeypad = (key: string) => {
-    if (['+', '-', '*', '/'].includes(key)) {
-      const currentVal = parseFloat(calcInput) || 0;
-      if (calcPrev !== null && calcOp) {
-        const result = performCalculation(calcPrev, currentVal, calcOp);
-        setCalcPrev(result);
-        setCalcInput(result.toString());
-      } else {
-        setCalcPrev(currentVal);
-      }
-      setCalcOp(key);
-      setShouldReset(true);
-    } else if (key === '=') {
-      if (calcPrev !== null && calcOp) {
-        const result = performCalculation(calcPrev, parseFloat(calcInput) || 0, calcOp);
-        setCalcInput(result.toString());
-        setCalcPrev(null);
-        setCalcOp(null);
-        setShouldReset(true);
-      }
-    } else if (key === 'AC') {
-      setCalcInput('0');
-      setCalcPrev(null);
-      setCalcOp(null);
-      setShouldReset(false);
-    } else if (key === 'DEL') {
-      setCalcInput(prev => prev.length > 1 ? prev.slice(0, -1) : '0');
-    } else {
-      setCalcInput(prev => {
-        if (shouldReset) {
-          setShouldReset(false);
-          return key === '.' ? '0.' : key;
-        }
-        if (key === '.') return prev.includes('.') ? prev : prev + '.';
-        return prev === '0' ? key : prev + key;
-      });
-    }
-  };
-
-  const chartData = useMemo(() => {
-    if (expenses.length === 0) return [];
-    const stats: Record<string, number> = {};
-    let totalTwd = 0;
-    expenses.forEach(exp => {
-      const rate = currencyRates[exp.currency] || 1;
-      const twdAmount = exp.amount * rate;
-      stats[exp.category] = (stats[exp.category] || 0) + twdAmount;
-      totalTwd += twdAmount;
-    });
-    let cumulativePercent = 0;
-    return Object.entries(stats)
-      .map(([cat, amount]) => {
-        const fraction = amount / totalTwd;
-        const startPercent = cumulativePercent;
-        cumulativePercent += fraction;
-        return {
-          category: cat, 
-          amount, 
-          fraction,
-          percent: (fraction * 100).toFixed(1),
-          startPercent, 
-          endPercent: cumulativePercent,
-          color: CATEGORY_COLORS[cat] || 'bg-slate'
-        };
-      })
-      .sort((a, b) => b.amount - a.amount);
-  }, [expenses, currencyRates]);
-
-  const categoryDetails = useMemo(() => {
-    if (!selectedCategoryForAnalysis) return [];
-    return expenses
-      .filter(exp => exp.category === selectedCategoryForAnalysis)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, selectedCategoryForAnalysis]);
-
-  const settlementPlans = useMemo(() => {
-    const balances: Record<string, number> = {};
-    members.forEach(m => balances[m.id] = 0);
+  const handleSaveExpense = (isEditMode: boolean = false) => {
+    if (!formData.amount || !formData.payerId || formData.splitWith.length === 0) return;
     
-    expenses.forEach(exp => {
-      const rate = currencyRates[exp.currency] || 1;
-      const amountInTwd = exp.amount * rate;
-      const share = amountInTwd / exp.splitWith.length;
-      
-      exp.splitWith.forEach(id => {
-        const splitKey = `${exp.id}-${id}`;
-        if (!clearedSplits[splitKey] && id !== exp.payerId) {
-          balances[exp.payerId] += share;
-          balances[id] -= share;
-        }
-      });
-    });
-
-    archivedSettlements.forEach(arch => {
-      balances[arch.from] += arch.amount; 
-      balances[arch.to] -= arch.amount;   
-    });
-
-    let creditors = members.map(m => ({ id: m.id, name: m.name, balance: balances[m.id] })).filter(m => m.balance > 0.5).sort((a, b) => b.balance - a.balance);
-    let debtors = members.map(m => ({ id: m.id, name: m.name, balance: balances[m.id] })).filter(m => m.balance < -0.5).sort((a, b) => a.balance - b.balance);
-    
-    const activePlans: { from: string, to: string, amount: number, key: string }[] = [];
-    let cIdx = 0, dIdx = 0;
-    const tempCreditors = creditors.map(c => ({ ...c }));
-    const tempDebtors = debtors.map(d => ({ ...d }));
-
-    while (cIdx < tempCreditors.length && dIdx < tempDebtors.length) {
-      const creditor = tempCreditors[cIdx], debtor = tempDebtors[dIdx];
-      const amount = Math.min(creditor.balance, Math.abs(debtor.balance));
-      activePlans.push({ from: debtor.id, to: creditor.id, amount, key: `${debtor.id}-${creditor.id}` });
-      creditor.balance -= amount;
-      debtor.balance += amount;
-      if (creditor.balance < 0.5) cIdx++;
-      if (Math.abs(debtor.balance) < 0.5) dIdx++;
-    }
-    return activePlans;
-  }, [expenses, members, currencyRates, clearedSplits, archivedSettlements]);
-
-  const handleArchiveSettlement = (plan: { from: string, to: string, amount: number }) => {
-    const newArchived: ArchivedSettlement = {
-      id: Date.now().toString(),
-      from: plan.from,
-      to: plan.to,
-      amount: plan.amount,
-      date: new Date().toLocaleDateString()
-    };
-    setArchivedSettlements([newArchived, ...archivedSettlements]);
-  };
-
-  const handleUnarchiveSettlement = (id: string) => {
-    setArchivedSettlements(archivedSettlements.filter(a => a.id !== id));
-  };
-
-  const toggleClearedSplit = (expenseId: string, memberId: string) => {
-    const key = `${expenseId}-${memberId}`;
-    setClearedSplits(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleSplitMember = (id: string) => {
-    if (formData.splitWith.includes(id)) {
-      setFormData({ ...formData, splitWith: formData.splitWith.filter(i => i !== id) });
-    } else {
-      setFormData({ ...formData, splitWith: [...formData.splitWith, id] });
-    }
-  };
-
-  const handleAddExpense = () => {
-    if (!formData.amount || formData.splitWith.length === 0) return;
     const exp: Expense = {
-      id: Date.now().toString(),
+      id: isEditMode && selectedExpense ? selectedExpense.id : Date.now().toString(),
       amount: parseFloat(formData.amount),
       currency: formData.currency,
       category: formData.category,
       payerId: formData.payerId,
       splitWith: formData.splitWith,
-      addedBy: myID,
-      date: formData.date || new Date().toISOString().split('T')[0],
+      addedBy: isEditMode && selectedExpense ? selectedExpense.addedBy : formData.payerId,
+      date: formData.date,
       note: formData.note
     };
-    setExpenses([exp, ...expenses]);
-    setShowAdd(false);
-  };
 
-  const handleUpdateExpense = () => {
-    if (!formData.amount || formData.splitWith.length === 0) return;
-    setExpenses(expenses.map(exp => exp.id === formData.id ? {
-      ...exp, amount: parseFloat(formData.amount), currency: formData.currency,
-      category: formData.category, payerId: formData.payerId,
-      splitWith: formData.splitWith, note: formData.note, date: formData.date
-    } : exp));
-    setShowEdit(false);
-  };
-
-  const startEdit = (exp: Expense) => {
-    setFormData({
-      id: exp.id,
-      amount: exp.amount.toString(),
-      currency: exp.currency,
-      note: exp.note,
-      category: exp.category,
-      payerId: exp.payerId,
-      splitWith: exp.splitWith,
-      date: exp.date
-    });
-    setShowEdit(true);
-  };
-
-  // 更新邏輯：當且僅當分攤人數等於總人數時，該筆才列入「團隊總支出」
-  const totalTeamTWD = useMemo(() => 
-    expenses.reduce((acc, curr) => {
-      const isGroupExpense = curr.splitWith.length === members.length;
-      if (isGroupExpense) {
-        return acc + (curr.amount * (currencyRates[curr.currency] || 1));
-      }
-      return acc;
-    }, 0)
-  , [expenses, currencyRates, members.length]);
-
-  const getCoordinatesForPercent = (percent: number, radius: number = 1) => {
-    const x = radius * Math.cos(2 * Math.PI * percent);
-    const y = radius * Math.sin(2 * Math.PI * percent);
-    return [x, y];
-  };
-
-  const getCategoryLabel = (cat: string) => {
-    const labels: Record<string, string> = { Food: '餐飲', Transport: '交通', Shopping: '採買', Hotel: '住宿', Ticket: '交通票', Activity: '玩樂', Accommodation: '住宿', Attraction: '景點' };
-    return labels[cat] || cat;
-  };
-
-  const getCategoryIcon = (cat: string) => {
-    const icons: Record<string, string> = { Food: 'fa-utensils', Transport: 'fa-car-side', Shopping: 'fa-bag-shopping', Hotel: 'fa-bed', Ticket: 'fa-train', Activity: 'fa-star', Accommodation: 'fa-hotel', Attraction: 'fa-camera' };
-    return icons[cat] || 'fa-tags';
-  };
-
-  const sliceColorMap: Record<string, string> = {
-    'bg-morandi-blue': '#B6C1C9', 
-    'bg-morandi-pink': '#D8B4A0', 
-    'bg-sage': '#A3A380', 
-    'bg-terracotta': '#D4A373', 
-    'bg-[#9BA4B5]': '#9BA4B5', 
-    'bg-[#B4846C]': '#B4846C' 
-  };
-
-  const calcResult = useMemo(() => {
-    const rate = currencyRates[calcCurrency] || 1;
-    const inputNum = parseFloat(calcInput) || 0;
-    if (isReverseExchange) {
-      return (inputNum / rate).toFixed(2);
+    let updatedExpenses;
+    if (isEditMode && selectedExpense) {
+      updatedExpenses = expenses.map(e => e.id === selectedExpense.id ? exp : e);
     } else {
-      return (inputNum * rate).toFixed(2);
+      updatedExpenses = [exp, ...expenses];
     }
-  }, [calcInput, calcCurrency, isReverseExchange, currencyRates]);
 
-  const handleAddNewRate = () => {
-    if (!newRateCode || !newRateValue) return;
-    const code = newRateCode.toUpperCase();
-    const rate = parseFloat(newRateValue);
-    if (isNaN(rate)) return;
-    
-    setCurrencyRates(prev => ({
-      ...prev,
-      [code]: rate
-    }));
-    setNewRateCode('');
-    setNewRateValue('');
+    dbService.updateField('expenses', updatedExpenses);
+    setShowAdd(false);
+    setShowEdit(false);
+    setShowDetail(false);
+    setSelectedExpense(null);
+  };
+
+  const markAsCleared = (repayment: Repayment) => {
+    const record: ArchivedSettlement = {
+      ...repayment,
+      id: Date.now().toString(),
+      date: new Date().toISOString()
+    };
+    dbService.updateField('archivedSettlements', [record, ...archivedSettlements]);
+  };
+
+  const undoSettlement = (id: string) => {
+    dbService.updateField('archivedSettlements', archivedSettlements.filter(s => s.id !== id));
+  };
+
+  const toggleMemberSettled = (exp: Expense, memberId: string) => {
+    const existing = archivedSettlements.find(s => s.expenseId === exp.id && s.fromId === memberId);
+    if (existing) {
+      undoSettlement(existing.id);
+    } else {
+      if (currentBalances[memberId] >= -0.1) return;
+      const rate = currencyRates[exp.currency] || 1;
+      const share = (exp.amount * rate) / exp.splitWith.length;
+      markAsCleared({
+        fromId: memberId,
+        toId: exp.payerId,
+        amount: share,
+        expenseId: exp.id
+      });
+    }
+  };
+
+  const isMemberSettledForExpense = (expId: string, memberId: string) => {
+    return archivedSettlements.some(s => s.expenseId === expId && s.fromId === memberId);
+  };
+
+  const getCategoryIcon = (cat: string) => CATEGORIES.find(c => c.id === cat)?.icon || 'fa-tags';
+  
+  const formatDateDisplay = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  };
+
+  const openAddModal = () => {
+    setSelectedExpense(null);
+    setFormData({
+      amount: '', currency: 'TWD', note: '', category: 'Food',
+      payerId: members[0]?.id || '', splitWith: members.map(m => m.id),
+      date: new Date().toISOString().split('T')[0]
+    });
+    setShowAdd(true);
+  };
+
+  const openEditModal = () => {
+    if (!selectedExpense) return;
+    setFormData({
+      amount: selectedExpense.amount.toString(),
+      currency: selectedExpense.currency,
+      note: selectedExpense.note,
+      category: selectedExpense.category,
+      payerId: selectedExpense.payerId,
+      splitWith: selectedExpense.splitWith,
+      date: selectedExpense.date
+    });
+    setShowDetail(false);
+    setShowEdit(true);
   };
 
   return (
     <div className="pb-24 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
       <div className="pt-6">
         <h1 className="text-3xl font-bold text-sage tracking-tight">記帳本</h1>
-        <p className="text-earth-dark mt-1 font-bold">聰明記帳，讓旅行更輕鬆</p>
+        <p className="text-earth-dark mt-1 font-bold">同步於雲端的團隊開支</p>
       </div>
 
-      <NordicCard className="bg-[#E6D5C3] p-6 border-none relative overflow-hidden nordic-shadow">
-        <div className="relative z-10 space-y-5">
+      <div className="bg-[#E7DDD3] px-7 py-5 border-none relative overflow-hidden nordic-shadow rounded-[2.5rem] shadow-xl">
+        <div className="relative z-10 space-y-4">
           <div className="flex justify-between items-start">
-            <div>
-              <span className="text-[11px] text-sage font-bold uppercase tracking-[0.15em] opacity-80">團隊總支出 (全體分攤項)</span>
-              <div className="text-3xl font-bold text-[#5C4D3C] mt-1">NT$ {Math.round(totalTeamTWD).toLocaleString()}</div>
+            <div className="space-y-0">
+              <span className="text-[10px] text-[#577C8E] font-bold uppercase tracking-[0.2em]">團隊總支出 ( 全體分攤項目 )</span>
+              <div className="text-[32px] font-bold text-[#5C4D3C] tracking-tighter leading-tight mt-1">
+                NT$ {totalTeamExpense.toLocaleString()}
+              </div>
             </div>
-            <div className="bg-white/40 p-2 rounded-2xl"><i className="fa-solid fa-coins text-[#5C4D3C] text-xl"></i></div>
+            <div className="w-10 h-10 bg-[#F3EBE3] rounded-2xl flex items-center justify-center text-[#5C4D3C] shadow-sm">
+              <i className="fa-solid fa-coins text-base"></i>
+            </div>
           </div>
-          <div className="bg-[#5C4D3C] rounded-2xl p-4 flex justify-between items-center shadow-lg">
-            <span className="text-xs text-[#E6D5C3] font-bold uppercase tracking-wider">結算狀態</span>
-            <div className="text-lg font-bold text-white">共 {expenses.length} 筆紀錄</div>
+
+          <div className="bg-[#5C4D3C] px-5 py-2.5 rounded-[1.5rem] flex items-center justify-between text-white/95 shadow-md">
+            <span className="text-[11px] font-bold tracking-[0.15em]">結算狀態</span>
+            <span className="text-xs font-bold tracking-tight">共 {expenses.length} 筆紀錄</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setShowSettlement(true)} className="bg-white/50 py-3 rounded-xl flex flex-col items-center active:scale-95 transition-all"><i className="fa-solid fa-handshake-angle text-[#5C4D3C] mb-1"></i><span className="text-[10px] text-[#5C4D3C] font-bold">結算</span></button>
-            <button onClick={() => setShowCalc(true)} className="bg-white/50 py-3 rounded-xl flex flex-col items-center active:scale-95 transition-all"><i className="fa-solid fa-calculator text-[#5C4D3C] mb-1"></i><span className="text-[10px] text-[#5C4D3C] font-bold">換算</span></button>
-            <button onClick={() => { setSelectedCategoryForAnalysis(null); setShowChart(true); }} className="bg-white/50 py-3 rounded-xl flex flex-col items-center active:scale-95 transition-all"><i className="fa-solid fa-chart-pie text-[#5C4D3C] mb-1"></i><span className="text-[10px] text-[#5C4D3C] font-bold">分析</span></button>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            <button 
+              onClick={() => setShowSettlement(true)} 
+              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
+            >
+              <i className="fa-solid fa-hand-holding-dollar text-[#5C4D3C] mb-1 text-sm"></i>
+              <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">結算</span>
+            </button>
+            <button 
+              onClick={() => setShowCalculator(true)}
+              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
+            >
+              <i className="fa-solid fa-calculator text-[#5C4D3C] mb-1 text-sm"></i>
+              <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">換算</span>
+            </button>
+            <button 
+              onClick={() => setShowAnalysis(true)}
+              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
+            >
+              <i className="fa-solid fa-chart-pie text-[#5C4D3C] mb-1 text-sm"></i>
+              <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">分析</span>
+            </button>
           </div>
         </div>
-      </NordicCard>
+      </div>
 
-      <NordicButton 
-        onClick={() => {
-          setFormData({ ...formData, amount: '', note: '', date: new Date().toISOString().split('T')[0] });
-          setShowAdd(true);
-        }} 
-        className="w-full h-14 bg-sage border-none"
-      >
-        <i className="fa-solid fa-plus"></i> 新增一筆支出
+      <NordicButton onClick={openAddModal} className="w-full h-14 bg-sage border-none shadow-xl active:scale-95 transition-all text-sm font-bold tracking-[0.2em] uppercase">
+        <i className="fa-solid fa-plus text-xs"></i> 新增支出
       </NordicButton>
 
-      <div className="space-y-3">
+      <div className="space-y-3 pb-8">
         {expenses.length === 0 ? (
-          <div className="py-16 text-center text-earth-dark/40 italic flex flex-col items-center font-bold tracking-widest uppercase opacity-40">尚未有任何花費紀錄</div>
+          <div className="py-16 text-center text-earth-dark/40 italic text-sm font-bold border-2 border-dashed border-paper/30 rounded-[2.5rem]">尚未有花費紀錄</div>
         ) : (
-          expenses.map(exp => (
-            <div key={exp.id} onClick={() => { setSelectedExpense(exp); setShowDetail(true); }} className="bg-white p-4 rounded-3xl border border-slate flex justify-between items-center shadow-sm relative group active:bg-cream/50 cursor-pointer transition-colors">
-              <div className="flex items-center gap-3">
-                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${CATEGORY_COLORS[exp.category] || 'bg-slate'}`}>
-                  <i className={`fa-solid ${getCategoryIcon(exp.category)}`}></i>
+          expenses.map(exp => {
+            const isFullSplit = members.length > 0 && exp.splitWith.length === members.length;
+            return (
+              <div key={exp.id} onClick={() => { setSelectedExpense(exp); setShowDetail(true); }} className="bg-white p-5 rounded-[2rem] border border-paper/40 flex justify-between items-center shadow-md active:scale-98 transition-all cursor-pointer">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-sm ${CATEGORY_COLORS[exp.category] || 'bg-sage'}`}>
+                    <i className={`fa-solid ${getCategoryIcon(exp.category)} text-lg`}></i>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sage text-base tracking-tight">{exp.note || '旅途支出'}</h4>
+                    <p className="text-[9px] font-bold text-earth-dark uppercase mt-1 tracking-widest">
+                      {members.find(m => m.id === exp.payerId)?.name || '未知'} 已支付
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-sage text-sm">{exp.note || '支出'}</h4>
-                  <p className="text-[9px] font-bold text-earth-dark uppercase tracking-wider">{members.find(m => m.id === exp.payerId)?.name} 代墊</p>
+                <div className="text-right">
+                  <div className="font-bold text-sage text-base">{exp.currency} {(exp.amount || 0).toLocaleString()}</div>
+                  <div className={`text-[8px] font-bold mt-1 px-2 py-0.5 rounded-full inline-block ${isFullSplit ? 'bg-harbor/10 text-harbor' : 'bg-paper/20 text-earth-dark/60'}`}>
+                    {isFullSplit ? '全體分攤' : `分攤 ${exp.splitWith.length} 人`}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right flex flex-col justify-center">
-                  <div className="font-bold text-sage text-sm">{exp.currency} {exp.amount.toLocaleString()}</div>
-                  <div className="text-[8px] font-bold text-earth-dark/40 uppercase tracking-widest">{exp.date}</div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); startEdit(exp); }} className="w-8 h-8 rounded-full bg-cream text-sage flex items-center justify-center active:scale-90"><i className="fa-solid fa-pen-to-square text-[10px]"></i></button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      <Modal isOpen={showSettlement} onClose={() => setShowSettlement(false)} title="團隊還款計畫">
-        <div className="space-y-6 pb-6 px-1 max-h-[70vh] overflow-y-auto no-scrollbar">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center px-1">
-              <span className="text-[10px] font-bold text-earth-dark uppercase tracking-widest">待處理還款</span>
-              <span className="text-[10px] font-bold text-sage opacity-70">點擊標記還清</span>
+      <Modal isOpen={showAnalysis} onClose={() => { setShowAnalysis(false); setDrillDownCategory(null); }} title="支出比例分析">
+        <div className="space-y-6 pb-4">
+          <div className="flex justify-between items-center px-1">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-earth-dark/40 uppercase tracking-widest">當前視角</span>
+              <span className="text-sm font-bold text-harbor">
+                {analysisMemberId === 'TEAM' ? '全團體總支出' : `${members.find(m => m.id === analysisMemberId)?.name} 的個人支出`}
+              </span>
             </div>
-            
-            {settlementPlans.length > 0 ? settlementPlans.map((plan) => (
-              <div 
-                key={plan.key} 
-                onClick={() => handleArchiveSettlement(plan)} 
-                className="bg-white p-4 rounded-2xl border-2 border-sage flex items-center gap-3 active:scale-[0.98] cursor-pointer transition-all shadow-sm hover:shadow-md"
-              >
-                <div className="flex flex-col items-center gap-1 min-w-[50px]">
-                  <img src={members.find(m => m.id === plan.from)?.avatar} className="w-8 h-8 rounded-full border border-slate" alt="debtor" />
-                  <span className="text-[10px] font-bold text-earth-dark">{members.find(m => m.id === plan.from)?.name}</span>
-                </div>
-                <div className="flex-grow flex flex-col items-center">
-                  <div className="font-bold text-sm mb-1 text-terracotta tracking-tight">
-                    NT$ {Math.round(plan.amount).toLocaleString()}
-                  </div>
-                  <div className="w-full h-px bg-slate relative">
-                    <i className="fa-solid fa-chevron-right absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate"></i>
-                  </div>
-                </div>
-                <div className="flex flex-col items-center gap-1 min-w-[50px]">
-                  <img src={members.find(m => m.id === plan.to)?.avatar} className="w-8 h-8 rounded-full border border-slate" alt="creditor" />
-                  <span className="text-[10px] font-bold text-earth-dark">{members.find(m => m.id === plan.to)?.name}</span>
-                </div>
+            <div className="relative group">
+              <button className="w-10 h-10 rounded-full bg-white shadow-md border border-paper/30 flex items-center justify-center text-harbor active:scale-90 transition-all">
+                <i className="fa-solid fa-user-gear text-sm"></i>
+              </button>
+              <div className="absolute right-0 top-12 bg-white rounded-2xl shadow-2xl border border-paper/20 p-2 z-50 min-w-[120px] opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all scale-95 group-hover:scale-100">
+                <button 
+                  onClick={() => { setAnalysisMemberId('TEAM'); setDrillDownCategory(null); }}
+                  className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest mb-1 ${analysisMemberId === 'TEAM' ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}
+                >
+                  <i className="fa-solid fa-users mr-2"></i> 團體
+                </button>
+                {members.map(m => (
+                  <button 
+                    key={m.id}
+                    onClick={() => { setAnalysisMemberId(m.id); setDrillDownCategory(null); }}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${analysisMemberId === m.id ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}
+                  >
+                    <img src={m.avatar} className="w-4 h-4 rounded-full" alt="" /> {m.name}
+                  </button>
+                ))}
               </div>
-            )) : (
-              <div className="py-8 bg-cream/30 rounded-2xl border-2 border-dashed border-slate text-center text-[10px] font-bold text-earth-dark/40 uppercase tracking-widest">
-                目前沒有新的欠帳
-              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center py-4 bg-white/40 rounded-[3rem] border border-paper/20 shadow-inner">
+            <DonutChart 
+              data={analysisData.chartData.map(d => ({
+                label: d.label,
+                value: d.value,
+                color: d.color
+              }))} 
+            />
+          </div>
+
+          <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
+            {analysisData.chartData.length === 0 ? (
+              <div className="py-12 text-center text-earth-dark/30 italic text-[11px] font-bold">目前暫無相關支出數據</div>
+            ) : (
+              analysisData.chartData.map(cat => (
+                <div key={cat.id} className="space-y-2">
+                  <div 
+                    onClick={() => setDrillDownCategory(drillDownCategory === cat.id ? null : cat.id)}
+                    className={`bg-white p-4 rounded-2xl border border-paper/30 flex items-center justify-between shadow-sm cursor-pointer active:scale-98 transition-all ${drillDownCategory === cat.id ? 'ring-2 ring-harbor/20' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs" style={{ backgroundColor: cat.color }}>
+                        <i className={`fa-solid ${CATEGORIES.find(c => c.id === cat.id)?.icon || 'fa-tag'}`}></i>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-sage">{cat.label}</span>
+                        <span className="text-[9px] font-bold text-earth-dark/60">{cat.percentage}% 佔比</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-sage">NT$ {cat.value.toLocaleString()}</div>
+                      <div className="text-[8px] font-bold text-earth-dark/40 uppercase tracking-widest">{cat.items.length} 筆明細</div>
+                    </div>
+                  </div>
+
+                  {drillDownCategory === cat.id && (
+                    <div className="px-2 space-y-1.5 animate-in slide-in-from-top-1 duration-300 pb-2">
+                      {cat.items.map(item => (
+                        <div key={item.id} className="bg-paper/5 p-3 rounded-xl border border-paper/20 flex justify-between items-center text-[10px] font-bold">
+                          <div className="flex flex-col">
+                            <span className="text-sage">{item.note || '旅途支出'}</span>
+                            <span className="text-earth-dark/50 text-[8px] uppercase tracking-widest">{item.date}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sage">
+                              {analysisMemberId === 'TEAM' 
+                                ? `NT$ ${Math.round(item.amount * (currencyRates[item.currency] || 1)).toLocaleString()}`
+                                : `NT$ ${Math.round((item.amount * (currencyRates[item.currency] || 1)) / item.splitWith.length).toLocaleString()}`
+                              }
+                            </div>
+                            <div className="text-[7px] text-earth-dark/40">
+                              {item.currency} {item.amount.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
             )}
           </div>
 
-          {archivedSettlements.length > 0 && (
-            <div className="space-y-4 pt-4 border-t border-slate/50">
-              <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] font-bold text-earth-dark uppercase tracking-widest opacity-60">已完成紀錄 (點擊可撤銷)</span>
-              </div>
-              
-              {archivedSettlements.map((arch) => (
-                <div 
-                  key={arch.id} 
-                  onClick={() => handleUnarchiveSettlement(arch.id)} 
-                  className="bg-slate/10 p-4 rounded-2xl border border-slate flex items-center gap-3 opacity-50 grayscale transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  <div className="flex flex-col items-center gap-1 min-w-[50px]">
-                    <img src={members.find(m => m.id === arch.from)?.avatar} className="w-7 h-7 rounded-full border border-slate" alt="past-debtor" />
-                    <span className="text-[9px] font-bold text-earth-dark">{members.find(m => m.id === arch.from)?.name}</span>
-                  </div>
-                  <div className="flex-grow flex flex-col items-center">
-                    <div className="font-bold text-xs mb-1 text-earth line-through">
-                      NT$ {Math.round(arch.amount).toLocaleString()}
-                    </div>
-                    <div className="text-[8px] font-bold text-sage bg-white/60 px-2 py-0.5 rounded-full uppercase tracking-widest">已結清</div>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 min-w-[50px]">
-                    <img src={members.find(m => m.id === arch.to)?.avatar} className="w-7 h-7 rounded-full border border-slate" alt="past-creditor" />
-                    <span className="text-[9px] font-bold text-earth-dark">{members.find(m => m.id === arch.to)?.name}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          <NordicButton onClick={() => setShowSettlement(false)} className="w-full py-4 bg-sage text-white font-bold mt-4">返回記帳本</NordicButton>
+          <NordicButton onClick={() => setShowAnalysis(false)} className="w-full h-12 bg-harbor text-white border-none shadow-lg text-[10px] tracking-widest uppercase">
+            關閉分析圖表
+          </NordicButton>
         </div>
       </Modal>
 
-      <Modal isOpen={showCalc} onClose={() => setShowCalc(false)} title="匯率換算計算機">
-        <div className="space-y-4 pb-2 px-1 flex flex-col items-center bg-transparent max-h-full">
-          <div className="w-full text-center text-[9px] font-bold text-earth-dark/50 uppercase tracking-[0.2em]">
-            匯率最後更新: {lastSync}
+      <Modal isOpen={showCalculator} onClose={() => setShowCalculator(false)} title="匯率換算計算機">
+        <div className="space-y-5 pb-2">
+          <div className="text-center">
+            <span className="text-[9px] font-bold text-earth-dark/40 uppercase tracking-widest">
+              匯率最後更新: {lastSyncTime || '正在同步...'}
+            </span>
           </div>
-          
-          <div className="w-full bg-cream border-2 border-slate rounded-4xl p-5 nordic-shadow relative">
-            <div className="flex justify-between items-center gap-2 mb-3 h-6">
-              {/* 輸入標籤 */}
-              <div className="flex-1 flex items-center gap-2">
-                {!isReverseExchange ? (
-                  <select 
-                    value={calcCurrency} 
-                    onChange={(e) => setCalcCurrency(e.target.value)} 
-                    className="bg-white border-2 border-slate rounded-xl px-2 py-0.5 text-[9px] font-bold text-sage outline-none shadow-sm h-6"
-                  >
-                    {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                ) : (
-                  <span className="bg-slate/40 text-sage px-2 py-0.5 rounded-xl text-[9px] font-bold shadow-sm h-6 flex items-center">TWD</span>
-                )}
-                <span className="text-[8px] font-bold text-earth-dark/40 uppercase tracking-tighter">輸入</span>
-              </div>
-              
-              {/* 切換按鈕對齊標籤文字 */}
-              <div className="flex flex-col items-center px-1 relative z-20">
-                <button 
-                  onClick={() => setIsReverseExchange(!isReverseExchange)}
-                  className="w-5 h-5 rounded-full bg-white border border-sage text-sage flex items-center justify-center shadow-md active:rotate-180 transition-all duration-300"
-                >
-                  <i className="fa-solid fa-right-left text-[7px]"></i>
-                </button>
-              </div>
-              
-              {/* 換算標籤 */}
-              <div className="flex-1 flex items-center justify-end gap-2 text-right">
-                <span className="text-[8px] font-bold text-earth-dark/40 uppercase tracking-tighter">換算</span>
-                {isReverseExchange ? (
-                  <select 
-                    value={calcCurrency} 
-                    onChange={(e) => setCalcCurrency(e.target.value)} 
-                    className="bg-white border-2 border-slate rounded-xl px-2 py-0.5 text-[9px] font-bold text-sage outline-none shadow-sm h-6"
-                  >
-                    {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                ) : (
-                  <span className="bg-slate/40 text-sage px-2 py-0.5 rounded-xl text-[9px] font-bold shadow-sm h-6 flex items-center">TWD</span>
-                )}
-              </div>
-            </div>
-
-            {/* 數值區：結果側 flex-1 讓 ≈ 可以往左靠 */}
-            <div className="flex justify-between items-end gap-3">
-              <div className="text-2xl font-bold text-sage truncate flex-shrink-0 leading-none tracking-tight">{calcInput}</div>
-              <div className="text-2xl font-bold text-terracotta flex-1 text-right truncate leading-none tracking-tight min-w-0">
-                <span className="text-lg opacity-40 mr-1.5 font-normal">≈</span>
-                {calcResult}
-              </div>
-            </div>
+          <div className="bg-[#E7DDD3] p-5 rounded-4xl border border-paper/40 relative shadow-md">
+             <div className="flex items-center justify-between gap-3">
+               <div className="flex-1 flex flex-col">
+                  <div className="flex items-center gap-2 mb-2">
+                    <select value={calcSourceCurrency} onChange={(e) => setCalcSourceCurrency(e.target.value)} className="bg-white px-3 py-1.5 rounded-xl text-[11px] font-bold text-harbor outline-none shadow-sm border border-paper/30">
+                      {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <span className="text-[8px] font-bold text-earth-dark/60">輸入</span>
+                  </div>
+                  <div className="text-2xl font-bold text-harbor truncate pr-2">{calcDisplay}</div>
+               </div>
+               <button onClick={handleCalcSwap} className="w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-harbor z-10 border border-paper/20">
+                 <i className="fa-solid fa-arrows-rotate text-xs"></i>
+               </button>
+               <div className="flex-1 flex flex-col text-right">
+                  <div className="flex items-center justify-end gap-2 mb-2">
+                    <span className="text-[8px] font-bold text-earth-dark/60">換算</span>
+                    <select value={calcTargetCurrency} onChange={(e) => setCalcTargetCurrency(e.target.value)} className="bg-[#D2C2B2]/30 px-3 py-1.5 rounded-xl text-[11px] font-bold text-harbor outline-none shadow-sm border border-paper/30">
+                      {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-end justify-end gap-1.5">
+                    <span className="text-xs font-bold text-stamp/50 pb-0.5">≈</span>
+                    <div className="text-2xl font-bold text-stamp truncate">{calcConvertedValue}</div>
+                  </div>
+               </div>
+             </div>
           </div>
+          <div className="grid grid-cols-4 gap-2.5">
+            <button onClick={() => setCalcDisplay('0')} className="h-14 rounded-2xl bg-stamp/60 text-white font-bold text-base shadow-sm">AC</button>
+            <button onClick={handleCalcBack} className="h-14 rounded-2xl bg-stamp/60 text-white font-bold text-base shadow-sm"><i className="fa-solid fa-delete-left"></i></button>
+            <button onClick={() => handleCalcOp('÷')} className="h-14 rounded-2xl bg-steel/20 text-harbor font-bold text-xl shadow-sm">÷</button>
+            <button onClick={() => handleCalcOp('×')} className="h-14 rounded-2xl bg-steel/20 text-harbor font-bold text-xl shadow-sm">×</button>
+            {['7','8','9','-'].map(k => (
+              <button key={k} onClick={() => isNaN(parseInt(k)) ? handleCalcOp(k) : handleCalcInput(k)} className={`h-14 rounded-2xl font-bold text-xl shadow-sm ${isNaN(parseInt(k)) ? 'bg-steel/20 text-harbor' : 'bg-white text-harbor border border-paper/20'}`}>{k}</button>
+            ))}
+            {['4','5','6','+'].map(k => (
+              <button key={k} onClick={() => isNaN(parseInt(k)) ? handleCalcOp(k) : handleCalcInput(k)} className={`h-14 rounded-2xl font-bold text-xl shadow-sm ${isNaN(parseInt(k)) ? 'bg-steel/20 text-harbor' : 'bg-white text-harbor border border-paper/20'}`}>{k}</button>
+            ))}
+            <button onClick={() => handleCalcInput('1')} className="h-14 rounded-2xl bg-white text-harbor font-bold text-xl border border-paper/20 shadow-sm">1</button>
+            <button onClick={() => handleCalcInput('2')} className="h-14 rounded-2xl bg-white text-harbor font-bold text-xl border border-paper/20 shadow-sm">2</button>
+            <button onClick={() => handleCalcInput('3')} className="h-14 rounded-2xl bg-white text-harbor font-bold text-xl border border-paper/20 shadow-sm">3</button>
+            <button onClick={handleCalcResult} className="h-14 rounded-2xl bg-harbor/80 text-white font-bold text-xl shadow-lg">=</button>
+            <button onClick={() => handleCalcInput('0')} className="h-14 rounded-2xl bg-white text-harbor font-bold text-xl border border-paper/20 shadow-sm">0</button>
+            <button onClick={() => handleCalcInput('.')} className="h-14 rounded-2xl bg-white text-harbor font-bold text-xl border border-paper/20 shadow-sm">.</button>
+            <button onClick={() => setShowRateManager(true)} className="h-14 rounded-2xl bg-paper/20 text-harbor font-bold text-lg border border-paper/40 shadow-sm"><i className="fa-solid fa-gear text-sm opacity-60"></i></button>
+            <button onClick={() => setShowCalculator(false)} className="h-14 rounded-2xl bg-harbor text-white font-bold text-xl shadow-lg"><i className="fa-solid fa-check"></i></button>
+          </div>
+        </div>
+      </Modal>
 
-          <div className="grid grid-cols-4 gap-2 w-full max-w-[320px]">
-            <button onClick={() => handleKeypad('AC')} className="h-11 rounded-xl bg-terracotta text-white font-bold text-sm shadow-sm active:scale-95">AC</button>
-            <button onClick={() => handleKeypad('DEL')} className="h-11 rounded-xl bg-terracotta text-white font-bold text-sm shadow-sm active:scale-95"><i className="fa-solid fa-delete-left"></i></button>
-            <button onClick={() => handleKeypad('/')} className="h-11 rounded-xl bg-sage/20 border border-sage text-sage font-bold text-lg shadow-sm active:scale-95">÷</button>
-            <button onClick={() => handleKeypad('*')} className="h-11 rounded-xl bg-sage/20 border border-sage text-sage font-bold text-lg shadow-sm active:scale-95">×</button>
-            
-            {['7', '8', '9'].map(n => <button key={n} onClick={() => handleKeypad(n)} className="h-11 rounded-xl bg-white border border-slate text-sage font-bold text-lg shadow-sm active:scale-95">{n}</button>)}
-            <button onClick={() => handleKeypad('-')} className="h-11 rounded-xl bg-sage/20 border border-sage text-sage font-bold text-lg shadow-sm active:scale-95">−</button>
-            
-            {['4', '5', '6'].map(n => <button key={n} onClick={() => handleKeypad(n)} className="h-11 rounded-xl bg-white border border-slate text-sage font-bold text-lg shadow-sm active:scale-95">{n}</button>)}
-            <button onClick={() => handleKeypad('+')} className="h-11 rounded-xl bg-sage/20 border border-sage text-sage font-bold text-lg shadow-sm active:scale-95">+</button>
-            
-            {['1', '2', '3'].map(n => <button key={n} onClick={() => handleKeypad(n)} className="h-11 rounded-xl bg-white border border-slate text-sage font-bold text-lg shadow-sm active:scale-95">{n}</button>)}
-            <button onClick={() => handleKeypad('=')} className="h-11 rounded-xl bg-sage text-white font-bold text-lg shadow-sm active:scale-95">=</button>
-
-            <button onClick={() => handleKeypad('0')} className="h-11 rounded-xl bg-white border border-slate text-sage font-bold text-lg shadow-sm active:scale-95">0</button>
-            <button onClick={() => handleKeypad('.')} className="h-11 rounded-xl bg-white border border-slate text-sage font-bold text-lg shadow-sm active:scale-95">.</button>
-            <button onClick={() => setShowManageRates(true)} className="h-11 rounded-xl bg-sage/10 text-sage font-bold text-[10px] flex items-center justify-center active:scale-95 border border-sage/20">
-              <i className="fa-solid fa-gear"></i>
-            </button>
-            <button onClick={() => setShowCalc(false)} className="h-11 rounded-xl bg-sage text-white font-bold flex items-center justify-center active:scale-95">
-              <i className="fa-solid fa-check"></i>
+      <Modal isOpen={showRateManager} onClose={() => setShowRateManager(false)} title="匯率管理設定">
+        <div className="space-y-6 pb-4">
+          <div className="flex justify-between items-center px-1">
+            <span className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest">目前匯率清單</span>
+            <button onClick={syncRates} disabled={isSyncing} className={`text-[10px] font-bold text-harbor flex items-center gap-1.5 ${isSyncing ? 'opacity-50' : ''}`}>
+              <i className={`fa-solid fa-arrows-rotate ${isSyncing ? 'animate-spin' : ''}`}></i>
+              {isSyncing ? '正在同步...' : '同步最新'}
             </button>
           </div>
+          <div className="space-y-2 max-h-[260px] overflow-y-auto no-scrollbar pr-1">
+            {(Object.entries(currencyRates) as [string, number][]).map(([code, rate]) => (
+              <div key={code} className="bg-white p-3.5 rounded-2xl border border-paper/30 flex justify-between items-center shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-paper/10 flex items-center justify-center font-bold text-harbor text-[11px]">{code}</div>
+                  <div className="text-xs font-bold text-harbor tracking-tight">x {rate.toFixed(4)} TWD</div>
+                </div>
+                {code !== 'TWD' && <button onClick={() => deleteCurrency(code)} className="text-stamp/40 hover:text-stamp p-2"><i className="fa-solid fa-trash-can text-[11px]"></i></button>}
+              </div>
+            ))}
+          </div>
+          <div className="bg-[#EBE3D9]/40 p-4 rounded-3xl border-2 border-dashed border-paper/40 space-y-3 shadow-inner">
+            <div className="text-center"><span className="text-[9px] font-bold text-earth-dark/50 uppercase tracking-widest">新增自定義匯率</span></div>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" placeholder="代碼 (JPY)" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value.toUpperCase())} className="w-full p-3 bg-white border border-paper/30 rounded-xl font-bold text-harbor text-[11px] outline-none shadow-sm" />
+              <input type="number" placeholder="對台幣匯率" value={newCurrencyRate} onChange={(e) => setNewCurrencyRate(e.target.value)} className="w-full p-3 bg-white border border-paper/30 rounded-xl font-bold text-harbor text-[11px] outline-none shadow-sm" />
+            </div>
+            <button onClick={handleAddCurrency} className="w-full h-11 bg-stamp text-white rounded-xl text-[10px] tracking-widest uppercase font-bold shadow-md">確認新增匯率</button>
+          </div>
+          <button onClick={() => setShowRateManager(false)} className="w-full py-3.5 rounded-2xl bg-paper/40 text-harbor text-[10px] tracking-[0.2em] uppercase font-bold">返回計算機</button>
         </div>
       </Modal>
 
-      <Modal isOpen={showManageRates} onClose={() => setShowManageRates(false)} title="匯率管理設定">
-        <div className="space-y-6 pb-4 px-1">
-          <div className="space-y-3">
-            <div className="flex justify-between px-2 items-end">
-              <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">當前匯率清單</span>
-              <button onClick={syncAllRates} className="text-[10px] text-sage font-bold flex items-center gap-1 active:scale-90 transition-transform">
-                <i className={`fa-solid fa-rotate ${isSyncing ? 'animate-spin' : ''}`}></i> 同步最新
-              </button>
+      <Modal isOpen={showSettlement} onClose={() => setShowSettlement(false)} title="團隊還款計畫">
+        <div className="space-y-5 pb-2 max-h-[78vh] flex flex-col overflow-hidden">
+          <div className="space-y-3 flex-shrink-0">
+            <div className="flex justify-between items-center px-1">
+              <span className="text-[10px] font-bold text-earth-dark/40 uppercase tracking-widest">待處理還款</span>
+              <span className="text-[10px] font-bold text-earth-dark/30">點擊標記還清</span>
             </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-              {Object.entries(currencyRates).map(([code, rate]) => (
-                <div key={code} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate shadow-sm">
-                  <span className="font-bold text-sage">{code} <span className="text-earth-dark/40 mx-2">x</span> {rate} TWD</span>
-                  {code !== 'TWD' && <button onClick={() => handleDeleteRate(code)} className="w-8 h-8 flex items-center justify-center text-terracotta/40 hover:text-terracotta active:scale-90 transition-all"><i className="fa-solid fa-trash-can text-sm"></i></button>}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-cream p-5 rounded-3xl border-2 border-slate space-y-4 shadow-inner">
-            <p className="text-[10px] font-bold text-earth-dark uppercase tracking-widest text-center opacity-80">新增自定義幣別</p>
-            <div className="flex gap-2">
-              <input type="text" placeholder="代碼 (JPY)" value={newRateCode} onChange={(e) => setNewRateCode(e.target.value.toUpperCase())} className="w-1/2 p-4 bg-white border-2 border-slate rounded-xl text-xs font-bold text-sage outline-none shadow-sm" />
-              <input type="number" placeholder="對台幣匯率" value={newRateValue} onChange={(e) => setNewRateValue(e.target.value)} className="w-1/2 p-4 bg-white border-2 border-slate rounded-xl text-xs font-bold text-sage outline-none shadow-sm" />
-            </div>
-            <NordicButton onClick={handleAddNewRate} className="w-full py-3.5 bg-terracotta text-white border-none text-xs font-bold">確認新增匯率</NordicButton>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal isOpen={showChart} onClose={() => setShowChart(false)} title={selectedCategoryForAnalysis ? `${getCategoryLabel(selectedCategoryForAnalysis)}細項` : "支出類別分析"}>
-        <div className="space-y-6 pb-6 px-1 flex flex-col items-center bg-transparent">
-          {chartData.length > 0 ? (
-            selectedCategoryForAnalysis ? (
-              <div className="animate-in slide-in-from-right duration-300 w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <button onClick={() => setSelectedCategoryForAnalysis(null)} className="text-xs font-bold text-sage flex items-center gap-1 active:scale-90 transition-transform">
-                    <i className="fa-solid fa-chevron-left"></i> 返回總覽
-                  </button>
-                </div>
-                <div className="space-y-3 max-h-[50vh] overflow-y-auto no-scrollbar pr-1">
-                  {categoryDetails.map((exp) => (
-                    <div key={exp.id} className="bg-white p-4 rounded-2xl border border-slate flex justify-between items-center shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <img src={members.find(m => m.id === exp.payerId)?.avatar} className="w-8 h-8 rounded-full border border-slate" alt="payer" />
-                        <div>
-                          <div className="text-sm font-bold text-sage">{exp.note || '項目'}</div>
-                          <div className="text-[9px] font-bold text-earth-dark opacity-60 uppercase">{exp.date}</div>
-                        </div>
-                      </div>
-                      <div className="text-right font-bold text-sage text-xs">{exp.currency} {exp.amount.toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
+            {settlementData.length === 0 ? (
+              <div className="py-10 border-2 border-dashed border-[#DED4C7] rounded-[2rem] flex items-center justify-center bg-white/10">
+                <span className="text-[10px] font-bold text-[#CEC4B7] italic tracking-tight">目前沒有新的欠帳</span>
               </div>
             ) : (
-              <div className="w-full bg-transparent">
-                <div className="relative flex justify-center py-4 bg-transparent mb-4">
-                  <svg viewBox="-1.1 -1.1 2.2 2.2" className="w-56 h-56 -rotate-90 bg-transparent overflow-visible drop-shadow-xl">
-                    {chartData.map((slice, i) => {
-                      const [startX, startY] = getCoordinatesForPercent(slice.startPercent);
-                      const [endX, endY] = getCoordinatesForPercent(slice.endPercent);
-                      const midPercent = (slice.startPercent + slice.endPercent) / 2;
-                      const [textX, textY] = getCoordinatesForPercent(midPercent, 0.72);
-                      const largeArcFlag = slice.fraction > 0.5 ? 1 : 0;
-                      const pathColor = sliceColorMap[slice.color] || '#E0E5D5';
-
-                      return (
-                        <g key={i} className="cursor-pointer group">
-                          <path 
-                            d={`M ${startX} ${startY} A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY} L 0 0`} 
-                            fill={pathColor} 
-                            className="hover:opacity-85 transition-opacity" 
-                            onClick={() => setSelectedCategoryForAnalysis(slice.category)} 
-                          />
-                          {slice.fraction > 0.04 && (
-                            <text
-                              x={textX}
-                              y={textY}
-                              transform={`rotate(90, ${textX}, ${textY})`}
-                              fill="white"
-                              fontSize="0.14"
-                              fontWeight="bold"
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              className="pointer-events-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]"
-                            >
-                              {Math.round(slice.fraction * 100)}%
-                            </text>
-                          )}
-                        </g>
-                      );
-                    })}
-                    <circle cx="0" cy="0" r="0.45" fill="#F7F4EB" />
-                  </svg>
-                </div>
-                <div className="space-y-3 w-full">
-                   <div className="px-2 pb-4 text-center">
-                     <span className="text-[11px] font-bold text-earth-dark uppercase tracking-[0.2em] opacity-80">
-                        總支出 NT$ {Math.round(chartData.reduce((acc, s) => acc + s.amount, 0)).toLocaleString()}
-                     </span>
-                   </div>
-                  {chartData.map((slice, i) => (
-                    <div key={i} onClick={() => setSelectedCategoryForAnalysis(slice.category)} className="bg-white p-4 rounded-2xl border border-slate flex items-center justify-between shadow-sm cursor-pointer hover:bg-cream/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-[10px] ${slice.color}`}><i className={`fa-solid ${getCategoryIcon(slice.category)}`}></i></div>
-                        <span className="text-sm font-bold text-sage">{getCategoryLabel(slice.category)}</span>
+              <div className="space-y-2">
+                {settlementData.map((rep, idx) => {
+                  const from = members.find(m => m.id === rep.fromId);
+                  const to = members.find(m => m.id === rep.toId);
+                  return (
+                    <div key={idx} onClick={() => markAsCleared(rep)} className="bg-white py-3.5 px-5 rounded-[2rem] border border-[#DED4C7] flex items-center justify-between active:scale-95 transition-all cursor-pointer shadow-sm">
+                      <div className="flex flex-col items-center gap-1 w-12">
+                        <img src={from?.avatar} className="w-9 h-9 rounded-full border border-[#E7DDD3]" alt="" />
+                        <span className="text-[9px] font-bold text-earth-dark truncate w-full text-center">{from?.name}</span>
                       </div>
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-sage">NT$ {Math.round(slice.amount).toLocaleString()}</div>
-                        <div className="text-[9px] font-bold text-earth-dark opacity-60">{slice.percent}%</div>
+                      <div className="flex-1 px-4 text-center">
+                        <div className="text-[15px] font-bold text-harbor mb-0.5">NT$ {Math.round(rep.amount).toLocaleString()}</div>
+                        <div className="flex items-center justify-center opacity-30">
+                          <div className="h-[1.5px] bg-paper flex-1"></div>
+                          <i className="fa-solid fa-chevron-right text-[7px] mx-1"></i>
+                          <div className="h-[1.5px] bg-paper flex-1"></div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 w-12">
+                        <img src={to?.avatar} className="w-9 h-9 rounded-full border border-[#E7DDD3]" alt="" />
+                        <span className="text-[9px] font-bold text-earth-dark truncate w-full text-center">{to?.name}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )
-          ) : <div className="py-20 text-center text-earth-dark/40 italic">無記帳數據</div>}
-          <NordicButton onClick={() => setShowChart(false)} className="w-full py-4 mt-6 bg-sage text-white font-bold">返回記帳本</NordicButton>
+            )}
+          </div>
+          <div className="flex-grow overflow-hidden flex flex-col min-h-0">
+            <div className="flex justify-between items-center px-1 mb-3">
+              <span className="text-[10px] font-bold text-earth-dark/40 uppercase tracking-widest">已完成紀錄 (點擊可撤銷)</span>
+            </div>
+            <div className="flex-grow overflow-y-auto no-scrollbar space-y-2 pr-1 pb-2 max-h-[220px]">
+              {archivedSettlements.length === 0 ? (
+                <div className="py-6 text-center text-[10px] font-bold text-earth-dark/20 italic">尚無歷史紀錄</div>
+              ) : (
+                archivedSettlements.map((s) => {
+                  const from = members.find(m => m.id === s.fromId);
+                  const to = members.find(m => m.id === s.toId);
+                  return (
+                    <div key={s.id} onClick={() => undoSettlement(s.id)} className="bg-[#F5F1EB]/50 py-2.5 px-4 rounded-[1.75rem] border border-[#E5DFD6] flex items-center justify-between active:scale-95 transition-all cursor-pointer group opacity-90">
+                      <div className="flex flex-col items-center gap-1 w-10">
+                        <img src={from?.avatar} className="w-7 h-7 rounded-full border border-white/50 grayscale opacity-40" alt="" />
+                        <span className="text-[8px] font-bold text-earth-dark/40">{from?.name}</span>
+                      </div>
+                      <div className="flex-1 text-center flex flex-col items-center justify-center">
+                        <div className="text-[11px] font-bold text-earth-dark/30 line-through mb-0.5 tracking-tight">NT$ {Math.round(s.amount).toLocaleString()}</div>
+                        <div className="bg-[#E5DFD6]/60 px-3 py-0.5 rounded-full text-[8px] font-bold text-earth-dark/50 uppercase tracking-widest">已結清</div>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 w-10">
+                        <img src={to?.avatar} className="w-7 h-7 rounded-full border border-white/50 grayscale opacity-40" alt="" />
+                        <span className="text-[8px] font-bold text-earth-dark/40">{to?.name}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+          <NordicButton onClick={() => setShowSettlement(false)} className="w-full h-14 bg-harbor text-white border-none shadow-xl rounded-2xl flex-shrink-0 text-xs font-bold tracking-[0.2em] uppercase">返回記帳本</NordicButton>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showAdd || showEdit} onClose={() => { setShowAdd(false); setShowEdit(false); }} title={showEdit ? "修改支出內容" : "記帳一筆支出"}>
+        <div className="space-y-5 pb-6 overflow-x-hidden">
+          <hr className="border-paper/30 -mx-6 mb-2" />
+          <div className="flex gap-2 bg-white border border-paper/40 rounded-2xl p-1.5 shadow-sm">
+             <select value={formData.currency} onChange={(e) => setFormData({...formData, currency: e.target.value})} className="bg-cream/40 px-4 rounded-xl font-bold text-sage text-xs outline-none">
+                {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
+             </select>
+             <input type="number" placeholder="輸入支出金額" value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} className="flex-grow p-3 bg-transparent font-bold text-sage text-xl outline-none" />
+          </div>
+          <div className="flex gap-3 min-w-0">
+            <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-[100px] h-14 bg-white border border-paper/40 rounded-2xl px-4 font-bold text-sage text-sm outline-none shadow-sm appearance-none">
+              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+            <input type="text" placeholder="備註用途" value={formData.note} onChange={(e) => setFormData({...formData, note: e.target.value})} className="flex-1 min-w-0 h-14 bg-white border border-paper/40 rounded-2xl px-5 font-bold text-sage text-sm outline-none shadow-sm" />
+          </div>
+          <div className="relative">
+            <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="absolute inset-0 opacity-0 z-10" />
+            <div className="w-full h-14 bg-white border border-paper/40 rounded-2xl flex items-center justify-center font-bold text-sage text-base">{formatDateDisplay(formData.date)}</div>
+          </div>
+          <div className="space-y-3">
+            <label className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest px-1">誰付錢？</label>
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+              {members.map(m => (
+                <div key={m.id} onClick={() => setFormData({...formData, payerId: m.id})} className={`flex-shrink-0 flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all cursor-pointer min-w-[120px] ${formData.payerId === m.id ? 'bg-white border-harbor shadow-md' : 'bg-white/50 border-paper/30 opacity-60'}`}>
+                  <img src={m.avatar} className="w-8 h-8 rounded-full object-cover border border-paper/20" alt="" />
+                  <span className="text-xs font-bold text-sage">{m.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center px-1">
+              <label className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest">分攤成員</label>
+              <button onClick={() => setFormData({...formData, splitWith: members.map(m => m.id)})} className="text-[10px] font-bold text-harbor underline">快速全選</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {members.map(m => (
+                <div key={m.id} onClick={() => setFormData(prev => ({ ...prev, splitWith: prev.splitWith.includes(m.id) ? prev.splitWith.filter(id => id !== m.id) : [...prev.splitWith, m.id] }))} className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-pointer ${formData.splitWith.includes(m.id) ? 'bg-white border-harbor shadow-sm' : 'bg-white/50 border-paper/30 opacity-60'}`}>
+                  <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center ${formData.splitWith.includes(m.id) ? 'bg-harbor border-harbor' : 'border-paper'}`}>
+                     {formData.splitWith.includes(m.id) && <i className="fa-solid fa-check text-[10px] text-white"></i>}
+                  </div>
+                  <img src={m.avatar} className="w-7 h-7 rounded-full object-cover" alt="" />
+                  <span className="text-xs font-bold text-sage">{m.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <NordicButton onClick={() => handleSaveExpense(showEdit)} disabled={!formData.amount || !formData.payerId || formData.splitWith.length === 0} className="w-full h-16 bg-harbor text-white border-none shadow-2xl rounded-3xl mt-2 tracking-widest font-bold">
+            {showEdit ? "儲存修改內容" : "確認並新增支出"}
+          </NordicButton>
         </div>
       </Modal>
 
       <Modal isOpen={showDetail} onClose={() => setShowDetail(false)} title="支出分攤明細">
         {selectedExpense && (
-          <div className="space-y-6 pb-4 px-1">
-            <div className="text-center space-y-2">
-              <div className={`inline-block px-4 py-1 ${CATEGORY_COLORS[selectedExpense.category] || 'bg-sage'} text-white rounded-full text-[10px] font-bold uppercase tracking-widest`}>{getCategoryLabel(selectedExpense.category)}</div>
-              <h2 className="text-2xl font-bold text-sage">{selectedExpense.note || '未命名支出'}</h2>
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-bold text-terracotta">{selectedExpense.currency} {selectedExpense.amount.toLocaleString()}</span>
-                {selectedExpense.currency !== 'TWD' && (
-                  <span className="text-[10px] font-bold text-earth-dark opacity-60 mt-1 uppercase">約 NT$ {Math.round(selectedExpense.amount * (currencyRates[selectedExpense.currency] || 1)).toLocaleString()}</span>
-                )}
-                <span className="text-[9px] font-bold text-earth-dark/40 uppercase tracking-[0.2em] mt-1">{selectedExpense.date}</span>
+          <div className="space-y-6 pb-4 max-h-[75vh] flex flex-col overflow-y-auto no-scrollbar">
+            <div className="flex justify-between items-center bg-white p-6 rounded-[2.5rem] border border-paper/40 shadow-md flex-shrink-0">
+              <div className="flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg ${CATEGORY_COLORS[selectedExpense.category] || 'bg-sage'}`}>
+                  <i className={`fa-solid ${CATEGORIES.find(c => c.id === selectedExpense.category)?.icon || 'fa-tags'} text-2xl`}></i>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-sage leading-tight">{selectedExpense.note || '旅途支出'}</h3>
+                  <p className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest mt-1">{formatDateDisplay(selectedExpense.date)}</p>
+                </div>
               </div>
+              <div className="text-right"><div className="text-2xl font-bold text-sage">{selectedExpense.currency} {selectedExpense.amount.toLocaleString()}</div></div>
             </div>
-
-            <div className="bg-white p-5 rounded-3xl border-2 border-slate space-y-5 shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate pb-4">
-                <span className="text-[10px] font-bold text-earth-dark uppercase tracking-widest">代墊付款人</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-sage">{members.find(m => m.id === selectedExpense.payerId)?.name}</span>
-                  <img src={members.find(m => m.id === selectedExpense.payerId)?.avatar} className="w-10 h-10 rounded-full border-2 border-slate shadow-sm" alt="payer" />
-                </div>
+            <div className="bg-white p-6 rounded-[2.5rem] border border-paper/40 shadow-sm space-y-4 flex-shrink-0">
+              <div className="flex justify-between items-center border-b border-paper/10 pb-3">
+                <span className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest">代墊付款人</span>
+                <div className="flex items-center gap-2"><span className="text-sm font-bold text-sage">{members.find(m => m.id === selectedExpense.payerId)?.name || '未知'}</span><img src={members.find(m => m.id === selectedExpense.payerId)?.avatar} className="w-8 h-8 rounded-full shadow-sm" alt="" /></div>
               </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center px-1">
-                   <span className="text-[10px] font-bold text-earth-dark uppercase tracking-widest">債務與分攤細節</span>
-                   <span className="text-[9px] font-bold text-sage opacity-60">點擊標記結清</span>
-                </div>
-                <div className="space-y-3">
+              <div className="space-y-3 pt-1">
+                <div className="flex justify-between items-center px-1"><span className="text-[10px] font-bold text-earth-dark/60 uppercase tracking-widest">分攤細節</span><span className="text-[10px] font-bold text-earth-dark/60">狀態</span></div>
+                <div className="space-y-2">
                   {selectedExpense.splitWith.map(id => {
-                    const isPayer = id === selectedExpense.payerId;
-                    const isCleared = clearedSplits[`${selectedExpense.id}-${id}`];
                     const m = members.find(mem => mem.id === id);
-                    const payer = members.find(mem => mem.id === selectedExpense.payerId);
-                    const shareTwd = Math.round((selectedExpense.amount * (currencyRates[selectedExpense.currency] || 1)) / selectedExpense.splitWith.length);
+                    const isPayer = id === selectedExpense.payerId;
+                    const isSettled = isMemberSettledForExpense(selectedExpense.id, id);
+                    
+                    const expenseTimestamp = parseInt(selectedExpense.id);
+                    const lastGlobalSettlementTime = memberLastGlobalSettlementTimes[id] || 0;
+                    const isCoveredByPastGlobalSettlement = !isSettled && expenseTimestamp < lastGlobalSettlementTime;
+                    const isCurrentlyZeroDebt = !isSettled && currentBalances[id] >= -0.1;
 
+                    const rate = currencyRates[selectedExpense.currency] || 1;
+                    const shareTwd = Math.round((selectedExpense.amount * rate) / selectedExpense.splitWith.length);
+                    
                     return (
                       <div 
                         key={id} 
-                        onClick={() => !isPayer && toggleClearedSplit(selectedExpense.id, id)}
-                        className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${isPayer ? 'bg-slate/10 border-slate cursor-default' : isCleared ? 'bg-cream/30 border-slate opacity-60 grayscale' : 'bg-white border-sage/30 shadow-sm cursor-pointer active:scale-[0.98]'}`}
+                        className={`flex justify-between items-center p-4 rounded-[1.75rem] border-2 transition-all ${isPayer ? 'bg-paper/5 border-paper/20' : (isSettled || isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? 'bg-white/40 border-paper/10 opacity-60' : 'bg-white border-paper/10 shadow-sm'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <img src={m?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="split-member" />
+                          <img src={m?.avatar} className="w-9 h-9 rounded-full border border-paper/20" alt="" />
                           <div className="flex flex-col">
-                            <span className={`text-xs font-bold ${isCleared && !isPayer ? 'text-earth line-through' : 'text-sage'}`}>{m?.name}</span>
-                            {!isPayer ? (
-                              <span className="text-[9px] font-bold uppercase tracking-tighter mt-0.5 text-earth-dark">
-                                應付 NT$ {shareTwd.toLocaleString()} <span className="mx-1">→</span> {payer?.name}
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-earth-dark font-bold uppercase tracking-tighter mt-0.5">自付份額</span>
-                            )}
+                            <span className="text-xs font-bold text-sage">{m?.name}</span>
+                            <span className="text-[9px] font-bold text-earth-dark/60">{isPayer ? '自付份額' : `應付 NT$ ${shareTwd.toLocaleString()}`}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                           {!isPayer && (
-                              <div className={`text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest ${isCleared ? 'bg-sage text-white' : 'bg-terracotta/10 text-terracotta'}`}>
-                                 {isCleared ? '已結清' : '未付'}
-                              </div>
-                           )}
-                           {isPayer && <i className="fa-solid fa-crown text-terracotta/40 text-[10px] mr-1"></i>}
+                        <div>
+                          {isPayer ? (
+                            <i className="fa-solid fa-crown text-yellow-500/40 text-xs mr-2"></i>
+                          ) : isSettled ? (
+                            <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-paper/20 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark">已結清</button>
+                          ) : (isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? (
+                            <button disabled className="bg-paper/5 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark/40 border border-paper/10">已隨總額結清</button>
+                          ) : (
+                            <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-harbor/10 px-3 py-1.5 rounded-full text-[9px] font-bold text-harbor">標記結清</button>
+                          )}
                         </div>
                       </div>
                     );
@@ -798,119 +910,12 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                 </div>
               </div>
             </div>
-            <NordicButton onClick={() => setShowDetail(false)} className="w-full py-4 bg-sage text-white font-bold">確認關閉</NordicButton>
+            <div className="grid grid-cols-2 gap-4 flex-shrink-0 pt-2">
+              <NordicButton onClick={openEditModal} variant="secondary" className="w-full h-14 bg-harbor text-white border-none"><i className="fa-solid fa-pen-to-square"></i> 修改支出</NordicButton>
+              <NordicButton onClick={() => { dbService.updateField('expenses', expenses.filter(e => e.id !== selectedExpense.id)); setShowDetail(false); }} variant="danger" className="w-full h-14 opacity-50 hover:opacity-100"><i className="fa-solid fa-trash-can"></i> 刪除紀錄</NordicButton>
+            </div>
           </div>
         )}
-      </Modal>
-
-      <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="修改支出內容">
-        <div className="space-y-6 px-1 pb-4">
-          <div className="bg-cream p-4 rounded-3xl border border-slate text-center">
-            <span className="text-[10px] font-bold text-earth-dark uppercase mb-2 block tracking-widest">金額</span>
-            <div className="flex items-center gap-3">
-              <select value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value })} className="bg-white border-2 border-slate rounded-2xl p-3 h-14 outline-none font-bold text-sage">
-                {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="w-full p-4 h-14 bg-white border-2 border-slate rounded-2xl text-2xl font-bold text-sage outline-none shadow-inner" />
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="grid grid-cols-6 gap-2">
-              <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="col-span-2 h-14 bg-white border-2 border-slate rounded-2xl text-xs outline-none font-bold text-sage text-center">
-                <option value="Food">餐飲</option><option value="Transport">交通</option><option value="Shopping">採買</option><option value="Hotel">住宿</option><option value="Activity">活動</option>
-              </select>
-              <input type="text" value={formData.note} onChange={(e) => setFormData({ ...formData, note: e.target.value })} placeholder="備註" className="col-span-4 h-14 px-4 bg-white border-2 border-slate rounded-2xl text-sm outline-none font-bold text-sage" />
-            </div>
-            <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full h-14 px-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage outline-none text-center" />
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-2">誰付錢？</p>
-            <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
-              {members.map(m => (
-                <button key={m.id} onClick={() => setFormData({ ...formData, payerId: m.id })} className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all ${formData.payerId === m.id ? 'border-sage bg-sage text-white shadow-md' : 'border-slate bg-white text-earth opacity-60'}`}>
-                  <img src={m.avatar} className="w-7 h-7 rounded-full shadow-inner" alt="m-avatar" />
-                  <span className="text-xs font-bold">{m.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-             <p className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-2">分攤成員</p>
-             <div className="grid grid-cols-2 gap-2">
-               {members.map(m => (
-                 <button key={m.id} onClick={() => toggleSplitMember(m.id)} className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition-all ${formData.splitWith.includes(m.id) ? 'border-sage bg-sage/5 text-sage shadow-sm' : 'border-slate bg-white text-earth opacity-40'}`}>
-                   <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${formData.splitWith.includes(m.id) ? 'bg-sage border-sage' : 'border-slate'}`}>
-                     {formData.splitWith.includes(m.id) && <i className="fa-solid fa-check text-white text-[9px]"></i>}
-                   </div>
-                   <img src={m.avatar} className="w-7 h-7 rounded-full shadow-inner" alt="split-avatar" />
-                   <span className="text-xs font-bold">{m.name}</span>
-                 </button>
-               ))}
-             </div>
-          </div>
-
-          <div className="flex gap-4 pt-4">
-            <button onClick={() => { setExpenses(expenses.filter(e => e.id !== formData.id)); setShowEdit(false); }} className="flex-1 h-16 bg-terracotta text-white rounded-3xl shadow-lg active:scale-95 transition-all"><i className="fa-solid fa-trash"></i></button>
-            <button onClick={handleUpdateExpense} className="flex-1 h-16 bg-sage text-white rounded-3xl font-bold shadow-lg active:scale-95 transition-all">儲存修改</button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="記帳一筆支出">
-        <div className="space-y-6 px-1 pb-4">
-          <div className="bg-cream p-4 rounded-3xl border border-slate text-center">
-            <span className="text-[10px] font-bold text-earth-dark uppercase mb-2 block tracking-widest">輸入金額</span>
-            <div className="flex items-center gap-3">
-              <select value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value })} className="bg-white border-2 border-slate rounded-2xl p-3 h-14 font-bold text-sage">
-                {Object.keys(currencyRates).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <input type="number" inputMode="decimal" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="w-full p-4 h-14 bg-white border-2 border-slate rounded-2xl text-2xl font-bold text-sage text-center shadow-inner" placeholder="0.00" />
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="grid grid-cols-6 gap-2">
-              <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="col-span-2 h-14 bg-white border-2 border-slate rounded-2xl text-xs font-bold text-sage text-center">
-                <option value="Food">餐飲</option><option value="Transport">交通</option><option value="Shopping">採買</option><option value="Hotel">住宿</option><option value="Activity">活動</option>
-              </select>
-              <input type="text" value={formData.note} onChange={(e) => setFormData({ ...formData, note: e.target.value })} placeholder="備註用途" className="col-span-4 h-14 px-4 bg-white border-2 border-slate rounded-2xl text-sm font-bold text-sage shadow-inner" />
-            </div>
-            <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full h-14 px-4 bg-white border-2 border-slate rounded-2xl font-bold text-sage shadow-sm text-center" />
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-2 opacity-80">誰付錢？</p>
-            <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
-              {members.map(m => (
-                <button key={m.id} onClick={() => setFormData({ ...formData, payerId: m.id })} className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl border-2 transition-all ${formData.payerId === m.id ? 'border-sage bg-sage text-white shadow-md' : 'border-slate bg-white text-earth opacity-60 hover:opacity-100'}`}>
-                  <img src={m.avatar} className="w-7 h-7 rounded-full shadow-inner" alt="member-avatar" />
-                  <span className="text-xs font-bold">{m.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-             <div className="flex justify-between items-center px-2">
-                <p className="text-[10px] font-bold text-earth-dark uppercase tracking-widest opacity-80">分攤成員</p>
-                <button onClick={() => setFormData({...formData, splitWith: members.map(m => m.id)})} className="text-[10px] font-bold text-sage underline opacity-60 uppercase tracking-[0.1em]">快速全選</button>
-             </div>
-             <div className="grid grid-cols-2 gap-2">
-               {members.map(m => (
-                 <button key={m.id} onClick={() => toggleSplitMember(m.id)} className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition-all ${formData.splitWith.includes(m.id) ? 'border-sage bg-sage/5 text-sage shadow-sm' : 'border-slate bg-white text-earth opacity-40 hover:opacity-60'}`}>
-                   <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${formData.splitWith.includes(m.id) ? 'bg-sage border-sage' : 'border-slate'}`}>
-                     {formData.splitWith.includes(m.id) && <i className="fa-solid fa-check text-white text-[9px]"></i>}
-                   </div>
-                   <img src={m.avatar} className="w-7 h-7 rounded-full shadow-inner" alt="split-avatar" />
-                   <span className="text-xs font-bold">{m.name}</span>
-                 </button>
-               ))}
-             </div>
-          </div>
-
-          <NordicButton onClick={handleAddExpense} className="w-full h-15 bg-sage text-white font-bold text-sm shadow-lg active:scale-95 transition-all mt-2">確認並新增支出</NordicButton>
-        </div>
       </Modal>
     </div>
   );
