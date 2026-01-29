@@ -10,11 +10,11 @@ interface TravelInfo {
   id: string;
   text: string;
   authorId: string;
-  imageUrl: string| null; // ✅ 不要 optional
+  imageUrl: string | null;
   createdAt: number;
 }
 
-const PACKING_CATS: { id: PackingCategory, label: string, icon: string }[] = [
+const PACKING_CATS: { id: PackingCategory; label: string; icon: string }[] = [
   { id: 'Essential', label: '必帶物品', icon: 'fa-passport' },
   { id: 'Gadgets', label: '3C用品', icon: 'fa-laptop' },
   { id: 'Clothing', label: '服飾衣著', icon: 'fa-shirt' },
@@ -27,39 +27,9 @@ interface PlanningViewProps {
   members: Member[];
 }
 
-const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
-  const [activeTab, setActiveTab] = useState<'todo' | ListCategory>('todo');
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  
-  const [expandedCats, setExpandedCats] = useState<Set<PackingCategory>>(new Set(PACKING_CATS.map(c => c.id)));
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [listData, setListData] = useState<Record<string, Record<'packing' | 'shopping', ChecklistItem[]>>>({});
-  const [travelInfos, setTravelInfos] = useState<TravelInfo[]>([]);
-
-  // 資訊分頁專用狀態
-  const [infoText, setInfoText] = useState('');
-  const [infoImage, setInfoImage] = useState<string | null>(null);
-  const [currentAuthorId, setCurrentAuthorId] = useState<string>('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (members.length > 0 && !currentAuthorId) {
-      setCurrentAuthorId(members[0].id);
-    }
-  }, [members]);
-
-  useEffect(() => {
-    const unsubTodo = dbService.subscribeField('todos', (data) => setTodos(data || []));
-    const unsubList = dbService.subscribeField('listData', (data) => setListData(data || {}));
-    const unsubInfo = dbService.subscribeField('travelInfos', (data) => setTravelInfos(data || []));
-    
-    return () => { unsubTodo(); unsubList(); unsubInfo(); };
-  }, []);
-
+/* ========= 🔥 Firestore 安全清洗（唯一版本） ========= */
 const deepClean = (obj: any): any => {
-  if (Array.isArray(obj)) {
-    return obj.map(deepClean);
-  }
+  if (Array.isArray(obj)) return obj.map(deepClean);
   if (obj && typeof obj === 'object') {
     return Object.fromEntries(
       Object.entries(obj)
@@ -70,39 +40,57 @@ const deepClean = (obj: any): any => {
   return obj;
 };
 
-const updatePlanningCloud = (field: string, value: any) =>
-  dbService.updateField(field, deepClean(value));
+const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
+  const [activeTab, setActiveTab] = useState<'todo' | ListCategory>('todo');
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
-  const [showAddTodo, setShowAddTodo] = useState(false);
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [todoInput, setTodoInput] = useState({ text: '', assignedTo: 'ALL' });
-  const [newItem, setNewItem] = useState<{ text: string, category: PackingCategory }>({ text: '', category: 'Essential' });
+  const [expandedCats, setExpandedCats] = useState<Set<PackingCategory>>(
+    new Set(PACKING_CATS.map(c => c.id))
+  );
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [listData, setListData] = useState<Record<string, Record<'packing' | 'shopping', ChecklistItem[]>>>({});
+  const [travelInfos, setTravelInfos] = useState<TravelInfo[]>([]);
 
-  const toggleCategory = (catId: PackingCategory) => {
-    const next = new Set(expandedCats);
-    if (next.has(catId)) next.delete(catId);
-    else next.add(catId);
-    setExpandedCats(next);
+  const [infoText, setInfoText] = useState('');
+  const [infoImage, setInfoImage] = useState<string | null>(null);
+  const [currentAuthorId, setCurrentAuthorId] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* ========= 🔥 Firestore 唯一出口 ========= */
+  const updatePlanningCloud = (field: string, value: any) => {
+    dbService.updateField(field, deepClean(value));
   };
+
+  /* ========= subscribe ========= */
+  useEffect(() => {
+    const u1 = dbService.subscribeField('todos', d => setTodos(d || []));
+    const u2 = dbService.subscribeField('listData', d => setListData(d || {}));
+    const u3 = dbService.subscribeField('travelInfos', d => setTravelInfos(d || []));
+    return () => { u1(); u2(); u3(); };
+  }, []);
+
+  useEffect(() => {
+    if (members.length && !currentAuthorId) {
+      setCurrentAuthorId(members[0].id);
+    }
+  }, [members, currentAuthorId]);
+
+  /* ========= handlers ========= */
 
   const handlePostInfo = () => {
     if (!infoText.trim() && !infoImage) return;
-    if (!currentAuthorId) {
-      alert("請先前往『成員』分頁新增旅伴");
-      return;
-    }
-  const newInfo: TravelInfo = {
-  id: Date.now().toString(),
-  text: infoText,
-  authorId: currentAuthorId,
-  imageUrl: infoImage ?? null, // ✅ 關鍵
-  createdAt: Date.now()
-};
-    const next = [newInfo, ...travelInfos];
-    updatePlanningCloud(
-  'travelInfos',
-  sanitizeForFirestore(next)
-);
+    if (!currentAuthorId) return;
+
+    const newInfo: TravelInfo = {
+      id: Date.now().toString(),
+      text: infoText,
+      authorId: currentAuthorId,
+      imageUrl: infoImage ?? null,
+      createdAt: Date.now()
+    };
+
+    updatePlanningCloud('travelInfos', [newInfo, ...travelInfos]);
+
     setInfoText('');
     setInfoImage(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -110,54 +98,50 @@ const updatePlanningCloud = (field: string, value: any) =>
 
   const handleInfoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setInfoImage(reader.result as string);
-        // 重要：清除 input 的值，這樣下次選取同一個檔案才能觸發 onChange
-        e.target.value = '';
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const deleteInfo = (id: string) => {
-    updatePlanningCloud('travelInfos', travelInfos.filter(i => i.id !== id));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setInfoImage(reader.result as string);
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddTodo = () => {
     if (!todoInput.text) return;
-    const next = [{ id: Date.now().toString(), text: todoInput.text, completed: false, assignedTo: todoInput.assignedTo }, ...todos];
-    updatePlanningCloud('todos', next);
+    updatePlanningCloud('todos', [
+      { id: Date.now().toString(), text: todoInput.text, completed: false, assignedTo: todoInput.assignedTo },
+      ...todos
+    ]);
     setShowAddTodo(false);
     setTodoInput({ text: '', assignedTo: 'ALL' });
   };
 
-  const deleteTodo = (id: string) => {
-    updatePlanningCloud('todos', todos.filter(t => t.id !== id));
-  };
-
   const handleAddItem = () => {
     if (!selectedMemberId || !newItem.text) return;
-    const item: ChecklistItem = { 
-     id: Date.now().toString(), 
-     text: newItem.text, 
-     completed: false, 
-     ownerId: selectedMemberId!,
-  ...(activeTab === 'packing' && { category: newItem.category }) // ✅
-};
-    const targetTab = activeTab as 'packing' | 'shopping';
-    const next = { 
-      ...listData, 
-      [selectedMemberId]: { 
-        ...(listData[selectedMemberId] || { packing: [], shopping: [] }), 
-        [targetTab]: [...(listData[selectedMemberId]?.[targetTab] || []), item] 
-      } 
+
+    const item: ChecklistItem = {
+      id: Date.now().toString(),
+      text: newItem.text,
+      completed: false,
+      ownerId: selectedMemberId,
+      ...(activeTab === 'packing' && { category: newItem.category })
     };
-    updatePlanningCloud('listData', next);
+
+    const tab = activeTab as 'packing' | 'shopping';
+
+    updatePlanningCloud('listData', {
+      ...listData,
+      [selectedMemberId]: {
+        ...(listData[selectedMemberId] || { packing: [], shopping: [] }),
+        [tab]: [...(listData[selectedMemberId]?.[tab] || []), item]
+      }
+    });
+
     setShowAddItemModal(false);
     setNewItem({ ...newItem, text: '' });
   };
+
 
   const toggleItem = (itemId: string) => {
     if (!selectedMemberId) return;
