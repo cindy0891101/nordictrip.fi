@@ -71,10 +71,7 @@ const deepClean = (obj: any): any => {
 };
 
 const updatePlanningCloud = (field: string, value: any) =>
-  dbService.updateField(field, deepClean(value));;
-
-const updatePlanningCloud = (field: string, value: any) =>
-  dbService.updateField(field, sanitizeForFirestore(value));
+  dbService.updateField(field, deepClean(value));
 
   const [showAddTodo, setShowAddTodo] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
