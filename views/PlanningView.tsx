@@ -87,13 +87,18 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     updatePlanningCloud('travelInfos', next);
     setInfoText('');
     setInfoImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleInfoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setInfoImage(reader.result as string);
+      reader.onloadend = () => {
+        setInfoImage(reader.result as string);
+        // 重要：清除 input 的值，這樣下次選取同一個檔案才能觸發 onChange
+        e.target.value = '';
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -373,12 +378,13 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
 
             <div className="flex justify-between items-center mt-5">
               <button 
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="w-14 h-14 rounded-[1.5rem] bg-white border-2 border-paper/30 text-sage flex items-center justify-center active:scale-90 transition-all hover:border-sage shadow-md"
               >
                 <i className="fa-solid fa-camera text-xl"></i>
-                <input type="file" ref={fileInputRef} onChange={handleInfoImageUpload} accept="image/*" className="hidden" />
               </button>
+              <input type="file" ref={fileInputRef} onChange={handleInfoImageUpload} accept="image/*" className="hidden" />
               <NordicButton onClick={handlePostInfo} className="px-10 bg-sage border-none h-14 rounded-full text-xs uppercase tracking-widest shadow-xl">
                 發布資訊
               </NordicButton>

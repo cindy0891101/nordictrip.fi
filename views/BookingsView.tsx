@@ -42,6 +42,8 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           ...editingBooking, 
           details: { ...editingBooking.details, image: reader.result as string } 
         });
+        // 重要：清除 input 的值
+        e.target.value = '';
       };
       reader.readAsDataURL(file);
     }
@@ -212,7 +214,7 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
             <div className="w-[85px] bg-harbor flex flex-col items-center justify-center py-6 gap-3 relative border-r border-dashed border-white/30">
               <i className="fa-solid fa-train text-white text-2xl"></i>
               <div className="flex-grow flex items-center justify-center">
-                <div className="[writing-mode:vertical-lr] rotate-180 text-white font-bold text-[8px] tracking-[0.3em] opacity-80 uppercase leading-none">
+                <div className="[writing-mode:vertical-lr] rotate-180 text-white font-bold text-[8px] tracking-[0.3em] uppercase leading-none">
                   TRANSIT TICKET
                 </div>
               </div>

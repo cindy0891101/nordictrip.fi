@@ -126,8 +126,9 @@ const App: React.FC = () => {
   const showLockButton = activeTab === 'schedule' || activeTab === 'bookings' || activeTab === 'members';
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto bg-cream pb-20 overflow-x-hidden relative">
-      <header className="px-4 pt-4 flex justify-end items-center h-14">
+    <div className="min-h-screen max-w-lg mx-auto bg-cream overflow-x-hidden relative flex flex-col">
+      {/* Header modified for iOS Status Bar Area */}
+      <header className="px-4 pt-[env(safe-area-inset-top)] flex justify-end items-center h-[calc(3.5rem+env(safe-area-inset-top))] flex-shrink-0">
         {showLockButton ? (
           <button 
             onClick={handleToggleLock}
@@ -142,7 +143,8 @@ const App: React.FC = () => {
         )}
       </header>
 
-      <main className="w-full overflow-x-hidden">
+      {/* Main content with padding adjustment for Fixed Nav + Safe Area */}
+      <main className="w-full flex-grow overflow-x-hidden pb-[calc(6rem+env(safe-area-inset-bottom))]">
         {renderContent()}
       </main>
 
@@ -164,6 +166,7 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Nav with Safe Area handling in glass-nav class via index.html CSS */}
       <nav className="fixed bottom-0 left-0 right-0 glass-nav z-50">
         <div className="max-w-lg mx-auto flex justify-around items-center h-20 px-4">
           {navItems.map((item) => {
