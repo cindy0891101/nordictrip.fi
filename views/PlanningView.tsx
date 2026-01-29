@@ -56,8 +56,22 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     return () => { unsubTodo(); unsubList(); unsubInfo(); };
   }, []);
 
- const sanitizeForFirestore = <T,>(data: T): T =>
-  JSON.parse(JSON.stringify(data));
+const deepClean = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(deepClean);
+  }
+  if (obj && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, deepClean(v)])
+    );
+  }
+  return obj;
+};
+
+const updatePlanningCloud = (field: string, value: any) =>
+  dbService.updateField(field, deepClean(value));;
 
 const updatePlanningCloud = (field: string, value: any) =>
   dbService.updateField(field, sanitizeForFirestore(value));
