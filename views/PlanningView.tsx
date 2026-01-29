@@ -84,7 +84,12 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
       createdAt: Date.now()
     };
     const next = [newInfo, ...travelInfos];
-    updatePlanningCloud('travelInfos', next);
+    const sanitizeForFirestore = <T,>(data: T): T =>
+  JSON.parse(JSON.stringify(data));
+    updatePlanningCloud(
+  'travelInfos',
+  sanitizeForFirestore(next)
+);
     setInfoText('');
     setInfoImage(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
