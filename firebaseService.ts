@@ -3,7 +3,8 @@ import {
   getFirestore,
   doc,
   onSnapshot,
-  updateDoc,
+  setDoc,
+  getDoc,
   Firestore
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import {
@@ -80,16 +81,28 @@ export const dbService = {
   async updateField(field: string, value: any) {
     mockDb.save(field, value);
 
-    if (useFirebase && db) {
-      const tripRef = doc(db, 'trips', DEFAULT_TRIP_ID);
-      try {
-        // 🔥 關鍵修正：只更新單一欄位
-        await updateDoc(tripRef, {
-          [field]: value
+    if (!useFirebase || !db) return;
+
+    const tripRef = doc(db, 'trips', DEFAULT_TRIP_ID);
+
+    try {
+      const snap = await getDoc(tripRef);
+
+      // ✅ 關鍵：第一次先建立 document
+      if (!snap.exists()) {
+        await setDoc(tripRef, {
+          todos: [],
+          listData: {},
+          travelInfos: [],
+          members: []
         });
-      } catch (e) {
-        console.error(`Firebase update error (${field})`, e);
       }
+
+      // ✅ 之後再更新單一欄位
+      await setDoc(tripRef, { [field]: value }, { merge: true });
+
+    } catch (e) {
+      console.error(`Firebase write error (${field})`, e);
     }
   }
 };
