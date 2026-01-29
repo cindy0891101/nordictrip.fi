@@ -10,7 +10,7 @@ interface TravelInfo {
   id: string;
   text: string;
   authorId: string;
-  imageUrl?: string;
+  imageUrl?: string| null; // ✅ 不要 optional
   createdAt: number;
 }
 
@@ -56,7 +56,11 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     return () => { unsubTodo(); unsubList(); unsubInfo(); };
   }, []);
 
-  const updatePlanningCloud = (field: string, value: any) => dbService.updateField(field, value);
+ const sanitizeForFirestore = <T,>(data: T): T =>
+  JSON.parse(JSON.stringify(data));
+
+const updatePlanningCloud = (field: string, value: any) =>
+  dbService.updateField(field, sanitizeForFirestore(value));
 
   const [showAddTodo, setShowAddTodo] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -76,13 +80,13 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
       alert("請先前往『成員』分頁新增旅伴");
       return;
     }
-    const newInfo: TravelInfo = {
-      id: Date.now().toString(),
-      text: infoText,
-      authorId: currentAuthorId,
-      imageUrl: infoImage || undefined,
-      createdAt: Date.now()
-    };
+  const newInfo: TravelInfo = {
+  id: Date.now().toString(),
+  text: infoText,
+  authorId: currentAuthorId,
+  imageUrl: infoImage ?? null, // ✅ 關鍵
+  createdAt: Date.now()
+};
     const next = [newInfo, ...travelInfos];
     const sanitizeForFirestore = <T,>(data: T): T =>
   JSON.parse(JSON.stringify(data));
@@ -127,12 +131,12 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   const handleAddItem = () => {
     if (!selectedMemberId || !newItem.text) return;
     const item: ChecklistItem = { 
-      id: Date.now().toString(), 
-      text: newItem.text, 
-      completed: false, 
-      ownerId: selectedMemberId, 
-      category: activeTab === 'packing' ? newItem.category : undefined 
-    };
+     id: Date.now().toString(), 
+     text: newItem.text, 
+     completed: false, 
+     ownerId: selectedMemberId!,
+  ...(activeTab === 'packing' && { category: newItem.category }) // ✅
+};
     const targetTab = activeTab as 'packing' | 'shopping';
     const next = { 
       ...listData, 
