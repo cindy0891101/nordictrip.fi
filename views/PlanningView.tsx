@@ -10,7 +10,7 @@ interface TravelInfo {
   id: string;
   text: string;
   authorId: string;
-  imageUrl?: string| null; // ✅ 不要 optional
+  imageUrl: string| null; // ✅ 不要 optional
   createdAt: number;
 }
 
@@ -88,8 +88,6 @@ const updatePlanningCloud = (field: string, value: any) =>
   createdAt: Date.now()
 };
     const next = [newInfo, ...travelInfos];
-    const sanitizeForFirestore = <T,>(data: T): T =>
-  JSON.parse(JSON.stringify(data));
     updatePlanningCloud(
   'travelInfos',
   sanitizeForFirestore(next)
