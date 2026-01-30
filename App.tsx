@@ -126,7 +126,7 @@ const App: React.FC = () => {
   const showLockButton = activeTab === 'schedule' || activeTab === 'bookings' || activeTab === 'members';
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto bg-cream overflow-x-hidden relative flex flex-col">
+    <div className="max-w-lg mx-auto bg-cream overflow-x-hidden relative flex flex-col">
       {/* Header modified for iOS Status Bar Area */}
       <header className="px-4 pt-[env(safe-area-inset-top)] flex justify-end items-center h-[calc(3.5rem+env(safe-area-inset-top))] flex-shrink-0">
         {showLockButton ? (
