@@ -329,7 +329,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
 
   return (
     <div className="pb-36 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
-      <div className="pt-6">
+      <div>
         <h1 className="text-3xl font-bold text-sage tracking-tight">事前準備</h1>
         <p className="text-earth-dark mt-1 font-bold italic">同步所有人的準備進度</p>
       </div>
