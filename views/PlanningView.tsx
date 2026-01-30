@@ -41,18 +41,21 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   const [currentAuthorId, setCurrentAuthorId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. 成員聯動保護邏輯：監控 members 清單變動
+  // 1. 成員聯動保護邏輯優化：避免在 members 載入期間誤刪狀態
   useEffect(() => {
-    // 如果當前選取的成員已經不在 members 清單中，重設選取狀態
-    if (selectedMemberId && !members.find(m => m.id === selectedMemberId)) {
-      setSelectedMemberId(null);
+    if (selectedMemberId && members.length > 0) {
+      const exists = members.some(m => m.id === selectedMemberId);
+      if (!exists) {
+        setSelectedMemberId(null);
+      }
     }
 
-    // 如果當前發布者不在清單中，自動切換至第一位成員
-    const isCurrentAuthorValid = members.some(m => m.id === currentAuthorId);
-    if (!isCurrentAuthorValid && members.length > 0) {
-      setCurrentAuthorId(members[0].id);
-    } else if (members.length === 0) {
+    if (members.length > 0) {
+      const isCurrentAuthorValid = members.some(m => m.id === currentAuthorId);
+      if (!isCurrentAuthorValid) {
+        setCurrentAuthorId(members[0].id);
+      }
+    } else {
       setCurrentAuthorId('');
     }
   }, [members, selectedMemberId, currentAuthorId]);
@@ -87,14 +90,13 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   const handlePostInfo = () => {
     const trimmedText = infoText.trim();
     if (!trimmedText && !infoImage) return;
-    if (!currentAuthorId) {
-      return;
-    }
+    if (!currentAuthorId) return;
+
     const newInfo: TravelInfo = {
       id: Date.now().toString(),
       text: trimmedText,
       authorId: currentAuthorId,
-      imageUrl: infoImage || "", // 確保非 undefined
+      imageUrl: infoImage || "", 
       createdAt: Date.now()
     };
     
@@ -120,7 +122,6 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
 
   const handleAddTodo = () => {
     if (!todoInput.text.trim()) return;
-   setTodos(prev => {  
     const next = [
       { 
         id: Date.now().toString(), 
@@ -128,11 +129,9 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
         completed: false, 
         assignedTo: todoInput.assignedTo 
       }, 
-      ...(prev || [])
+      ...todos
     ];
     dbService.updateField('todos', next);
-    return next;
-  }); 
     setShowAddTodo(false);
     setTodoInput({ text: '', assignedTo: 'ALL' });
   };
@@ -143,42 +142,41 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   };
 
   const handleAddItem = () => {
+    // 確保 selectedMemberId 存在，這在手機端同步不穩時至關重要
     if (!selectedMemberId || !newItem.text.trim()) return;
     
-    const targetTab = activeTab as 'packing' | 'shopping';
+    const targetTab = activeTab === 'packing' || activeTab === 'shopping' ? activeTab : 'packing';
+    
     const item: ChecklistItem = { 
       id: Date.now().toString(), 
       text: newItem.text.trim(), 
       completed: false, 
       ownerId: selectedMemberId, 
-      category: targetTab === 'packing' ? newItem.category : 'Others' // 確保 category 永遠有值
+      category: targetTab === 'packing' ? newItem.category : 'Others'
     };
 
-    setListData(prev => {
-  const safePrev = prev || {};
-  const next = {
-    ...safePrev,
-    [selectedMemberId]: {
-      packing: safePrev[selectedMemberId]?.packing || [],
-      shopping: safePrev[selectedMemberId]?.shopping || [],
-      [targetTab]: [
-        ...(safePrev[selectedMemberId]?.[targetTab] || []),
-        item
-      ]
-    }
-  };
-  dbService.updateField('listData', next);
-  return next;
-});
+    // 使用預防性深層展開，確保所有路徑都已初始化且不為 undefined
+    const currentMemberData = listData[selectedMemberId] || { packing: [], shopping: [] };
+    const targetList = Array.isArray(currentMemberData[targetTab]) ? currentMemberData[targetTab] : [];
 
-setShowAddItemModal(false);
-setNewItem(p => ({ ...p, text: '' }));
-  };  
+    const next = { 
+      ...listData, 
+      [selectedMemberId]: { 
+        ...currentMemberData,
+        [targetTab]: [...targetList, item] 
+      } 
+    };
+
+    dbService.updateField('listData', next);
+    setShowAddItemModal(false);
+    setNewItem(prev => ({ ...prev, text: '' }));
+  };
 
   const toggleItem = (itemId: string) => {
     if (!selectedMemberId) return;
-    const targetTab = activeTab as 'packing' | 'shopping';
-    const currentList = listData[selectedMemberId]?.[targetTab] || [];
+    const targetTab = activeTab === 'packing' || activeTab === 'shopping' ? activeTab : 'packing';
+    const currentMemberData = listData[selectedMemberId] || { packing: [], shopping: [] };
+    const currentList = Array.isArray(currentMemberData[targetTab]) ? currentMemberData[targetTab] : [];
     
     const nextList = currentList.map(item => 
       item.id === itemId ? { ...item, completed: !item.completed } : item
@@ -187,7 +185,7 @@ setNewItem(p => ({ ...p, text: '' }));
     const next = {
       ...listData,
       [selectedMemberId]: {
-        ...(listData[selectedMemberId] || { packing: [], shopping: [] }),
+        ...currentMemberData,
         [targetTab]: nextList
       }
     };
@@ -196,13 +194,16 @@ setNewItem(p => ({ ...p, text: '' }));
 
   const deleteItem = (itemId: string) => {
     if (!selectedMemberId) return;
-    const targetTab = activeTab as 'packing' | 'shopping';
-    const nextList = (listData[selectedMemberId]?.[targetTab] || []).filter(item => item.id !== itemId);
+    const targetTab = activeTab === 'packing' || activeTab === 'shopping' ? activeTab : 'packing';
+    const currentMemberData = listData[selectedMemberId] || { packing: [], shopping: [] };
+    const currentList = Array.isArray(currentMemberData[targetTab]) ? currentMemberData[targetTab] : [];
+    
+    const nextList = currentList.filter(item => item.id !== itemId);
     
     const next = {
       ...listData,
       [selectedMemberId]: {
-        ...(listData[selectedMemberId] || { packing: [], shopping: [] }),
+        ...currentMemberData,
         [targetTab]: nextList
       }
     };
@@ -228,9 +229,10 @@ setNewItem(p => ({ ...p, text: '' }));
   );
 
   const renderChecklist = () => {
-    const targetTab = activeTab as 'packing' | 'shopping';
+    const targetTab = activeTab === 'packing' || activeTab === 'shopping' ? activeTab : 'packing';
     const member = members.find(m => m.id === selectedMemberId);
-    const items = listData[selectedMemberId!]?.[targetTab] || [];
+    const memberData = listData[selectedMemberId!] || { packing: [], shopping: [] };
+    const items = Array.isArray(memberData[targetTab]) ? memberData[targetTab] : [];
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -336,7 +338,7 @@ setNewItem(p => ({ ...p, text: '' }));
         {(['todo', 'packing', 'shopping', 'info'] as const).map((t) => (
           <button 
             key={t} 
-            onClick={() => { setActiveTab(t); setSelectedMemberId(null); }} 
+            onClick={() => { if(activeTab !== t) { setActiveTab(t); setSelectedMemberId(null); } }} 
             className={`flex-1 py-2.5 rounded-full text-[10px] font-bold transition-all uppercase tracking-widest ${activeTab === t ? 'bg-sage text-white shadow-lg' : 'text-earth-dark/60 hover:bg-white/30'}`}
           >
             {t === 'todo' ? '團隊待辦' : t === 'packing' ? '行李' : t === 'shopping' ? '採買' : '資訊'}
