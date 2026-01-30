@@ -120,6 +120,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
 
   const handleAddTodo = () => {
     if (!todoInput.text.trim()) return;
+   setTodos(prev => {  
     const next = [
       { 
         id: Date.now().toString(), 
@@ -127,9 +128,11 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
         completed: false, 
         assignedTo: todoInput.assignedTo 
       }, 
-      ...todos
+      ...(prev || [])
     ];
     dbService.updateField('todos', next);
+    return next;
+  }); 
     setShowAddTodo(false);
     setTodoInput({ text: '', assignedTo: 'ALL' });
   };
@@ -151,18 +154,26 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
       category: targetTab === 'packing' ? newItem.category : 'Others' // 確保 category 永遠有值
     };
 
-    const next = { 
-      ...listData, 
-      [selectedMemberId]: { 
-        packing: listData[selectedMemberId]?.packing || [],
-        shopping: listData[selectedMemberId]?.shopping || [],
-        [targetTab]: [...(listData[selectedMemberId]?.[targetTab] || []), item] 
-      } 
-    };
-    dbService.updateField('listData', next);
-    setShowAddItemModal(false);
-    setNewItem(prev => ({ ...prev, text: '' }));
+    setListData(prev => {
+  const safePrev = prev || {};
+  const next = {
+    ...safePrev,
+    [selectedMemberId]: {
+      packing: safePrev[selectedMemberId]?.packing || [],
+      shopping: safePrev[selectedMemberId]?.shopping || [],
+      [targetTab]: [
+        ...(safePrev[selectedMemberId]?.[targetTab] || []),
+        item
+      ]
+    }
   };
+
+  dbService.updateField('listData', next);
+  return next;
+});
+
+setShowAddItemModal(false);
+setNewItem(p => ({ ...p, text: '' }));
 
   const toggleItem = (itemId: string) => {
     if (!selectedMemberId) return;
