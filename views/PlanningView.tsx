@@ -328,13 +328,15 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   };
 
   return (
-    <div className="pb-36 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
-      <div>
+    <div className="pb-36 px-4 overflow-x-hidden animate-in fade-in duration-500"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+      <div className="pt-2 pb-4">
         <h1 className="text-3xl font-bold text-sage tracking-tight">事前準備</h1>
         <p className="text-earth-dark mt-1 font-bold italic">同步所有人的準備進度</p>
       </div>
 
-      <div className="flex bg-white/60 p-1.5 rounded-full border border-paper/40 shadow-inner">
+      <div className="mt-4 flex bg-white/60 p-1.5 rounded-full border border-paper/40 shadow-inner">
         {(['todo', 'packing', 'shopping', 'info'] as const).map((t) => (
           <button 
             key={t} 
