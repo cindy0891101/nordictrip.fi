@@ -167,13 +167,13 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
       ]
     }
   };
-
   dbService.updateField('listData', next);
   return next;
 });
 
 setShowAddItemModal(false);
 setNewItem(p => ({ ...p, text: '' }));
+  };  
 
   const toggleItem = (itemId: string) => {
     if (!selectedMemberId) return;
