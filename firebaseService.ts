@@ -78,31 +78,22 @@ export const dbService = {
     }
   },
 
-  async updateField(field: string, value: any) {
-    mockDb.save(field, value);
 
-    if (!useFirebase || !db) return;
 
+async updateField(field: string, value: any) {
+  mockDb.save(field, value);
+
+  if (useFirebase && db) {
     const tripRef = doc(db, 'trips', DEFAULT_TRIP_ID);
-
     try {
-      const snap = await getDoc(tripRef);
-
-      // ✅ 關鍵：第一次先建立 document
-      if (!snap.exists()) {
-        await setDoc(tripRef, {
-          todos: [],
-          listData: {},
-          travelInfos: [],
-          members: []
-        });
-      }
-
-      // ✅ 之後再更新單一欄位
-      await setDoc(tripRef, { [field]: value }, { merge: true });
-
+      await setDoc(
+        tripRef,
+        { [field]: value },
+        { merge: true } // 🔥 關鍵
+      );
     } catch (e) {
       console.error(`Firebase write error (${field})`, e);
     }
   }
+}
 };
