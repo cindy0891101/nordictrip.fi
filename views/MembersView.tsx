@@ -10,6 +10,7 @@ interface MembersViewProps {
   onDeleteMember: (id: string) => void;
   onUpdateMemberInfo: (id: string, name: string, title: string) => void;
   isEditMode: boolean;
+  onToggleLock?: () => void;
   driveUrl: string;
   onUpdateDriveUrl: (url: string) => void;
 }
@@ -21,6 +22,7 @@ const MembersView: React.FC<MembersViewProps> = ({
   onDeleteMember,
   onUpdateMemberInfo,
   isEditMode,
+  onToggleLock,
   driveUrl,
   onUpdateDriveUrl
 }) => {
@@ -28,11 +30,8 @@ const MembersView: React.FC<MembersViewProps> = ({
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [newName, setNewName] = useState('');
-  
-  // 編輯成員資訊用狀態
   const [editNameValue, setEditNameValue] = useState('');
   const [editTitleValue, setEditTitleValue] = useState('');
-  
   const [driveUrlInput, setDriveUrlInput] = useState(driveUrl);
   const [currentEditId, setCurrentEditId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,18 +85,24 @@ const MembersView: React.FC<MembersViewProps> = ({
 
   return (
     <div className="pb-24 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="pt-6">
+      <div className="pt-2 flex items-center gap-2">
         <h1 className="text-3xl font-bold text-sage">成員清單</h1>
-        <p className="text-earth-dark mt-1 font-bold">旅伴們一起快樂出遊</p>
+        {onToggleLock && (
+          <button 
+            onClick={onToggleLock}
+            className="opacity-0 hover:opacity-100 active:opacity-100 focus:opacity-100 transition-opacity p-2 -ml-1"
+            title={isEditMode ? "鎖定視圖" : "開啟編輯"}
+          >
+            <i className={`fa-solid ${isEditMode ? 'fa-lock-open text-stamp' : 'fa-lock text-ink/20'}`}></i>
+          </button>
+        )}
+      </div>
+      
+      <div className="px-1 -mt-4">
+        <p className="text-earth-dark font-bold text-xs italic">旅伴們一起快樂出遊</p>
       </div>
 
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        accept="image/*" 
-        className="hidden" 
-      />
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
 
       <div className="grid grid-cols-2 gap-4">
         {members.map(member => (
@@ -110,77 +115,27 @@ const MembersView: React.FC<MembersViewProps> = ({
                 <i className="fa-solid fa-trash-can text-[9px]"></i>
               </button>
             )}
-
             <div className="relative inline-block mb-2">
               <img src={member.avatar} className="w-16 h-16 rounded-full border-[3px] border-slate shadow-inner object-cover" alt={member.name} />
-              
-              <div 
-                onClick={(e) => { e.stopPropagation(); handleCameraClick(member.id); }}
-                className="absolute bottom-0 right-0 bg-sage text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all shadow-md"
-              >
-                <i className="fa-solid fa-camera text-[8px]"></i>
-              </div>
+              <div onClick={(e) => { e.stopPropagation(); handleCameraClick(member.id); }} className="absolute bottom-0 right-0 bg-sage text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-white cursor-pointer active:scale-90 transition-all shadow-md"><i className="fa-solid fa-camera text-[8px]"></i></div>
             </div>
-
-            <div 
-              onClick={() => {
-                if (isEditMode) {
-                  setCurrentEditId(member.id);
-                  setEditNameValue(member.name);
-                  setEditTitleValue(member.title || '');
-                  setShowEditMemberModal(true);
-                }
-              }}
-              className={`group/name flex flex-col items-center ${isEditMode ? 'cursor-pointer' : ''}`}
-            >
-              <h3 className="text-sm font-bold text-sage flex items-center gap-1">
-                {member.name}
-                {isEditMode && <i className="fa-solid fa-pen text-[8px] opacity-0 group-hover/name:opacity-100 transition-opacity"></i>}
-              </h3>
-              <span className="text-[8px] text-earth-dark font-bold uppercase tracking-widest block mt-0.5 opacity-60">
-                {member.title || 'Buddy'}
-              </span>
+            <div onClick={() => { if (isEditMode) { setCurrentEditId(member.id); setEditNameValue(member.name); setEditTitleValue(member.title || ''); setShowEditMemberModal(true); } }} className={`group/name flex flex-col items-center ${isEditMode ? 'cursor-pointer' : ''}`}>
+              <h3 className="text-sm font-bold text-sage flex items-center gap-1">{member.name}{isEditMode && <i className="fa-solid fa-pen text-[8px] opacity-0 group-hover/name:opacity-100 transition-opacity"></i>}</h3>
+              <span className="text-[8px] text-earth-dark font-bold uppercase tracking-widest block mt-0.5 opacity-60">{member.title || 'Buddy'}</span>
             </div>
           </NordicCard>
         ))}
-        
-        <NordicCard 
-          onClick={() => setShowInviteModal(true)}
-          className="border-2 border-dashed border-earth bg-white/40 flex flex-col items-center justify-center py-5 hover:bg-white hover:border-sage transition-all shadow-sm"
-        >
-          <div className="w-10 h-10 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-1">
-            <i className="fa-solid fa-user-plus text-earth text-xs"></i>
-          </div>
+        <NordicCard onClick={() => setShowInviteModal(true)} className="border-2 border-dashed border-earth bg-white/40 flex flex-col items-center justify-center py-5 hover:bg-white hover:border-sage transition-all shadow-sm">
+          <div className="w-10 h-10 rounded-full border-2 border-earth border-dashed flex items-center justify-center mb-1"><i className="fa-solid fa-user-plus text-earth text-xs"></i></div>
           <span className="text-[10px] font-bold text-earth">邀請旅伴</span>
         </NordicCard>
       </div>
 
       <div className="mt-8 space-y-4">
-        <h3 className="font-bold text-sage px-2 flex justify-between items-center">
-          群組共同檔案
-          {isEditMode && (
-            <button 
-              onClick={() => { setDriveUrlInput(driveUrl); setShowDriveModal(true); }}
-              className="text-[10px] bg-sage/10 px-3 py-1 rounded-full text-sage hover:bg-sage hover:text-white transition-all"
-            >
-              <i className="fa-solid fa-link mr-1"></i> 設定連結
-            </button>
-          )}
-        </h3>
-        
-        <NordicCard 
-          onClick={handleDriveClick}
-          className={`flex items-center gap-4 group transition-all ${driveUrl ? 'hover:border-sage' : ''}`}
-        >
-          <div className="w-12 h-12 rounded-xl bg-harbor/20 text-harbor flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-            <i className="fa-brands fa-google-drive"></i>
-          </div>
-          <div className="flex-grow">
-            <h4 className="font-bold text-sage">共享雲端硬碟</h4>
-            <p className="text-xs text-earth-dark font-bold">
-              {driveUrl ? '點擊查看所有的行程照片' : '尚未設定雲端連結'}
-            </p>
-          </div>
+        <h3 className="font-bold text-sage px-2 flex justify-between items-center">群組共同檔案{isEditMode && (<button onClick={() => { setDriveUrlInput(driveUrl); setShowDriveModal(true); }} className="text-[10px] bg-sage/10 px-3 py-1 rounded-full text-sage hover:bg-sage hover:text-white transition-all"><i className="fa-solid fa-link mr-1"></i> 設定連結</button>)}</h3>
+        <NordicCard onClick={handleDriveClick} className={`flex items-center gap-4 group transition-all ${driveUrl ? 'hover:border-sage' : ''}`}>
+          <div className="w-12 h-12 rounded-xl bg-harbor/20 text-harbor flex items-center justify-center text-xl group-hover:scale-110 transition-transform"><i className="fa-brands fa-google-drive"></i></div>
+          <div className="flex-grow"><h4 className="font-bold text-sage">共享雲端硬碟</h4><p className="text-xs text-earth-dark font-bold">{driveUrl ? '點擊查看所有的行程照片' : '尚未設定雲端連結'}</p></div>
           <i className={`fa-solid ${driveUrl ? 'fa-arrow-up-right-from-square' : 'fa-chevron-right'} text-earth-dark text-xs`}></i>
         </NordicCard>
       </div>
@@ -189,18 +144,9 @@ const MembersView: React.FC<MembersViewProps> = ({
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">旅伴姓名</label>
-            <input 
-              type="text" 
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="輸入姓名..."
-              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
-              autoFocus
-            />
+            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="輸入姓名..." className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm" autoFocus />
           </div>
-          <NordicButton onClick={handleAdd} className="w-full py-4">
-            確定加入
-          </NordicButton>
+          <NordicButton onClick={handleAdd} className="w-full py-4">確定加入</NordicButton>
         </div>
       </Modal>
 
@@ -208,34 +154,15 @@ const MembersView: React.FC<MembersViewProps> = ({
         <div className="space-y-5">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">成員姓名</label>
-            <input 
-              type="text" 
-              value={editNameValue}
-              onChange={(e) => setEditNameValue(e.target.value)}
-              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
-              autoFocus
-            />
+            <input type="text" value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm" autoFocus />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">成員稱號</label>
-            <input 
-              type="text" 
-              value={editTitleValue}
-              onChange={(e) => setEditTitleValue(e.target.value)}
-              placeholder="例如：專業導航、美食專家..."
-              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm"
-            />
+            <input type="text" value={editTitleValue} onChange={(e) => setEditTitleValue(e.target.value)} placeholder="例如：專業導航、美食專家..." className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none shadow-sm" />
           </div>
           <div className="pt-2">
-            <NordicButton onClick={handleUpdateMemberSubmit} className="w-full py-4">
-              儲存資訊
-            </NordicButton>
-            <button 
-              onClick={() => { if(currentEditId) { onDeleteMember(currentEditId); setShowEditMemberModal(false); } }}
-              className="w-full py-3 mt-2 text-stamp font-bold text-[10px] uppercase tracking-widest hover:underline"
-            >
-              <i className="fa-solid fa-user-minus mr-2"></i> 移除此成員
-            </button>
+            <NordicButton onClick={handleUpdateMemberSubmit} className="w-full py-4">儲存資訊</NordicButton>
+            <button onClick={() => { if(currentEditId) { onDeleteMember(currentEditId); setShowEditMemberModal(false); } }} className="w-full py-3 mt-2 text-stamp font-bold text-[10px] uppercase tracking-widest hover:underline"><i className="fa-solid fa-user-minus mr-2"></i> 移除此成員</button>
           </div>
         </div>
       </Modal>
@@ -244,18 +171,10 @@ const MembersView: React.FC<MembersViewProps> = ({
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-earth-dark uppercase tracking-widest pl-1">Google Drive 網址</label>
-            <textarea 
-              value={driveUrlInput}
-              onChange={(e) => setDriveUrlInput(e.target.value)}
-              placeholder="貼上您的共享資料夾網址..."
-              className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none min-h-[100px] shadow-sm"
-              autoFocus
-            />
+            <textarea value={driveUrlInput} onChange={(e) => setDriveUrlInput(e.target.value)} placeholder="貼上您的共享資料夾網址..." className="w-full p-4 bg-white border-2 border-paper rounded-2xl font-bold text-sage outline-none min-h-[100px] shadow-sm" autoFocus />
           </div>
           <p className="text-[10px] text-earth-dark italic px-1">設定完成後，全體旅伴點擊卡片即可開啟此連結。</p>
-          <NordicButton onClick={handleSaveDriveUrl} className="w-full py-4">
-            儲存連結設定
-          </NordicButton>
+          <NordicButton onClick={handleSaveDriveUrl} className="w-full py-4">儲存連結設定</NordicButton>
         </div>
       </Modal>
     </div>

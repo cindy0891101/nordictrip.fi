@@ -31,19 +31,17 @@ const CATEGORIES = [
   { id: 'Others', label: '其他', icon: 'fa-tags' }
 ];
 
-// 定義符合 Nordic 奶油風的主題色 Hex 碼，用於 SVG 渲染
 const CATEGORY_HEX: Record<string, string> = {
-  Food: '#D2C2B2',          // Aged Paper
-  Transport: '#8E9CA3',     // Faded Steel
-  Shopping: '#DC8670',      // Stamp Red (Warm Coral)
-  Accommodation: '#2B2C2B', // Ink Charcoal
-  Activity: '#577C8E',      // Harbor Blue
-  Attraction: '#577C8E',    // Harbor Blue
-  Ticket: '#577C8E',        // Harbor Blue
-  Others: '#8E9CA3'         // Faded Steel
+  Food: '#D2C2B2',
+  Transport: '#8E9CA3',
+  Shopping: '#DC8670',
+  Accommodation: '#2B2C2B',
+  Activity: '#577C8E',
+  Attraction: '#577C8E',
+  Ticket: '#577C8E',
+  Others: '#8E9CA3'
 };
 
-// 優化後的圓餅圖組件
 const DonutChart: React.FC<{ data: { label: string, value: number, color: string }[] }> = ({ data }) => {
   const total = data.reduce((acc, curr) => acc + curr.value, 0);
   let currentPercentage = 0;
@@ -51,9 +49,7 @@ const DonutChart: React.FC<{ data: { label: string, value: number, color: string
   return (
     <div className="relative w-56 h-56 mx-auto flex items-center justify-center">
       <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90 drop-shadow-sm">
-        {/* 背景底環 */}
         <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F3EBE3" strokeWidth="3.2" />
-        
         {total === 0 ? (
           <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F3EBE3" strokeWidth="3.2" />
         ) : (
@@ -80,7 +76,6 @@ const DonutChart: React.FC<{ data: { label: string, value: number, color: string
           })
         )}
       </svg>
-      {/* 圓心文字資訊 */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span className="text-[10px] font-bold text-earth-dark/50 uppercase tracking-[0.2em] mb-0.5">Total Expenses</span>
         <div className="flex items-baseline gap-1">
@@ -147,7 +142,6 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
     }, 0));
   }, [expenses, members, currencyRates]);
 
-  // 分析資料計算 - 優化後的分類計算
   const analysisData = useMemo(() => {
     const categoriesSum: Record<string, { total: number, items: Expense[] }> = {};
     CATEGORIES.forEach(c => categoriesSum[c.id] = { total: 0, items: [] });
@@ -407,7 +401,6 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
   };
 
   const getCategoryIcon = (cat: string) => CATEGORIES.find(c => c.id === cat)?.icon || 'fa-tags';
-  
   const formatDateDisplay = (dateStr: string) => {
     const d = new Date(dateStr);
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
@@ -440,9 +433,9 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
 
   return (
     <div className="pb-24 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
-      <div className="pt-6">
+      <div className="pt-2">
         <h1 className="text-3xl font-bold text-sage tracking-tight">記帳本</h1>
-        <p className="text-earth-dark mt-1 font-bold">同步於雲端的團隊開支</p>
+        <p className="text-earth-dark mt-1 font-bold text-xs italic">同步於雲端的團隊開支</p>
       </div>
 
       <div className="bg-[#E7DDD3] px-7 py-5 border-none relative overflow-hidden nordic-shadow rounded-[2.5rem] shadow-xl">
@@ -458,31 +451,20 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
               <i className="fa-solid fa-coins text-base"></i>
             </div>
           </div>
-
           <div className="bg-[#5C4D3C] px-5 py-2.5 rounded-[1.5rem] flex items-center justify-between text-white/95 shadow-md">
             <span className="text-[11px] font-bold tracking-[0.15em]">結算狀態</span>
             <span className="text-xs font-bold tracking-tight">共 {expenses.length} 筆紀錄</span>
           </div>
-
           <div className="grid grid-cols-3 gap-2.5">
-            <button 
-              onClick={() => setShowSettlement(true)} 
-              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
-            >
+            <button onClick={() => setShowSettlement(true)} className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95">
               <i className="fa-solid fa-hand-holding-dollar text-[#5C4D3C] mb-1 text-sm"></i>
               <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">結算</span>
             </button>
-            <button 
-              onClick={() => setShowCalculator(true)}
-              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
-            >
+            <button onClick={() => setShowCalculator(true)} className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95">
               <i className="fa-solid fa-calculator text-[#5C4D3C] mb-1 text-sm"></i>
               <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">換算</span>
             </button>
-            <button 
-              onClick={() => setShowAnalysis(true)}
-              className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95"
-            >
+            <button onClick={() => setShowAnalysis(true)} className="bg-[#F3EBE3] py-2.5 rounded-[1.5rem] flex flex-col items-center hover:bg-white transition-all shadow-sm active:scale-95">
               <i className="fa-solid fa-chart-pie text-[#5C4D3C] mb-1 text-sm"></i>
               <span className="text-[9px] text-[#5C4D3C] font-bold tracking-wider">分析</span>
             </button>
@@ -539,45 +521,27 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                 <i className="fa-solid fa-user-gear text-sm"></i>
               </button>
               <div className="absolute right-0 top-12 bg-white rounded-2xl shadow-2xl border border-paper/20 p-2 z-50 min-w-[120px] opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all scale-95 group-hover:scale-100">
-                <button 
-                  onClick={() => { setAnalysisMemberId('TEAM'); setDrillDownCategory(null); }}
-                  className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest mb-1 ${analysisMemberId === 'TEAM' ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}
-                >
+                <button onClick={() => { setAnalysisMemberId('TEAM'); setDrillDownCategory(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest mb-1 ${analysisMemberId === 'TEAM' ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}>
                   <i className="fa-solid fa-users mr-2"></i> 團體
                 </button>
                 {members.map(m => (
-                  <button 
-                    key={m.id}
-                    onClick={() => { setAnalysisMemberId(m.id); setDrillDownCategory(null); }}
-                    className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${analysisMemberId === m.id ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}
-                  >
+                  <button key={m.id} onClick={() => { setAnalysisMemberId(m.id); setDrillDownCategory(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${analysisMemberId === m.id ? 'bg-harbor text-white' : 'hover:bg-paper/10 text-sage'}`}>
                     <img src={m.avatar} className="w-4 h-4 rounded-full" alt="" /> {m.name}
                   </button>
                 ))}
               </div>
             </div>
           </div>
-
           <div className="flex flex-col items-center py-4 bg-white/40 rounded-[3rem] border border-paper/20 shadow-inner">
-            <DonutChart 
-              data={analysisData.chartData.map(d => ({
-                label: d.label,
-                value: d.value,
-                color: d.color
-              }))} 
-            />
+            <DonutChart data={analysisData.chartData.map(d => ({ label: d.label, value: d.value, color: d.color }))} />
           </div>
-
           <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
             {analysisData.chartData.length === 0 ? (
               <div className="py-12 text-center text-earth-dark/30 italic text-[11px] font-bold">目前暫無相關支出數據</div>
             ) : (
               analysisData.chartData.map(cat => (
                 <div key={cat.id} className="space-y-2">
-                  <div 
-                    onClick={() => setDrillDownCategory(drillDownCategory === cat.id ? null : cat.id)}
-                    className={`bg-white p-4 rounded-2xl border border-paper/30 flex items-center justify-between shadow-sm cursor-pointer active:scale-98 transition-all ${drillDownCategory === cat.id ? 'ring-2 ring-harbor/20' : ''}`}
-                  >
+                  <div onClick={() => setDrillDownCategory(drillDownCategory === cat.id ? null : cat.id)} className={`bg-white p-4 rounded-2xl border border-paper/30 flex items-center justify-between shadow-sm cursor-pointer active:scale-98 transition-all ${drillDownCategory === cat.id ? 'ring-2 ring-harbor/20' : ''}`}>
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs" style={{ backgroundColor: cat.color }}>
                         <i className={`fa-solid ${CATEGORIES.find(c => c.id === cat.id)?.icon || 'fa-tag'}`}></i>
@@ -592,7 +556,6 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                       <div className="text-[8px] font-bold text-earth-dark/40 uppercase tracking-widest">{cat.items.length} 筆明細</div>
                     </div>
                   </div>
-
                   {drillDownCategory === cat.id && (
                     <div className="px-2 space-y-1.5 animate-in slide-in-from-top-1 duration-300 pb-2">
                       {cat.items.map(item => (
@@ -608,9 +571,7 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                                 : `NT$ ${Math.round((item.amount * (currencyRates[item.currency] || 1)) / item.splitWith.length).toLocaleString()}`
                               }
                             </div>
-                            <div className="text-[7px] text-earth-dark/40">
-                              {item.currency} {item.amount.toLocaleString()}
-                            </div>
+                            <div className="text-[7px] text-earth-dark/40">{item.currency} {item.amount.toLocaleString()}</div>
                           </div>
                         </div>
                       ))}
@@ -620,20 +581,13 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
               ))
             )}
           </div>
-
-          <NordicButton onClick={() => setShowAnalysis(false)} className="w-full h-12 bg-harbor text-white border-none shadow-lg text-[10px] tracking-widest uppercase">
-            關閉分析圖表
-          </NordicButton>
+          <NordicButton onClick={() => setShowAnalysis(false)} className="w-full h-12 bg-harbor text-white border-none shadow-lg text-[10px] tracking-widest uppercase">關閉分析圖表</NordicButton>
         </div>
       </Modal>
 
       <Modal isOpen={showCalculator} onClose={() => setShowCalculator(false)} title="匯率換算計算機">
         <div className="space-y-5 pb-2">
-          <div className="text-center">
-            <span className="text-[9px] font-bold text-earth-dark/40 uppercase tracking-widest">
-              匯率最後更新: {lastSyncTime || '正在同步...'}
-            </span>
-          </div>
+          <div className="text-center"><span className="text-[9px] font-bold text-earth-dark/40 uppercase tracking-widest">匯率最後更新: {lastSyncTime || '正在同步...'}</span></div>
           <div className="bg-[#E7DDD3] p-5 rounded-4xl border border-paper/40 relative shadow-md">
              <div className="flex items-center justify-between gap-3">
                <div className="flex-1 flex flex-col">
@@ -645,9 +599,7 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                   </div>
                   <div className="text-2xl font-bold text-harbor truncate pr-2">{calcDisplay}</div>
                </div>
-               <button onClick={handleCalcSwap} className="w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-harbor z-10 border border-paper/20">
-                 <i className="fa-solid fa-arrows-rotate text-xs"></i>
-               </button>
+               <button onClick={handleCalcSwap} className="w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-harbor z-10 border border-paper/20"><i className="fa-solid fa-arrows-rotate text-xs"></i></button>
                <div className="flex-1 flex flex-col text-right">
                   <div className="flex items-center justify-end gap-2 mb-2">
                     <span className="text-[8px] font-bold text-earth-dark/60">換算</span>
@@ -872,20 +824,14 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                     const m = members.find(mem => mem.id === id);
                     const isPayer = id === selectedExpense.payerId;
                     const isSettled = isMemberSettledForExpense(selectedExpense.id, id);
-                    
                     const expenseTimestamp = parseInt(selectedExpense.id);
                     const lastGlobalSettlementTime = memberLastGlobalSettlementTimes[id] || 0;
                     const isCoveredByPastGlobalSettlement = !isSettled && expenseTimestamp < lastGlobalSettlementTime;
                     const isCurrentlyZeroDebt = !isSettled && currentBalances[id] >= -0.1;
-
                     const rate = currencyRates[selectedExpense.currency] || 1;
                     const shareTwd = Math.round((selectedExpense.amount * rate) / selectedExpense.splitWith.length);
-                    
                     return (
-                      <div 
-                        key={id} 
-                        className={`flex justify-between items-center p-4 rounded-[1.75rem] border-2 transition-all ${isPayer ? 'bg-paper/5 border-paper/20' : (isSettled || isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? 'bg-white/40 border-paper/10 opacity-60' : 'bg-white border-paper/10 shadow-sm'}`}
-                      >
+                      <div key={id} className={`flex justify-between items-center p-4 rounded-[1.75rem] border-2 transition-all ${isPayer ? 'bg-paper/5 border-paper/20' : (isSettled || isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? 'bg-white/40 border-paper/10 opacity-60' : 'bg-white border-paper/10 shadow-sm'}`}>
                         <div className="flex items-center gap-3">
                           <img src={m?.avatar} className="w-9 h-9 rounded-full border border-paper/20" alt="" />
                           <div className="flex flex-col">
@@ -894,15 +840,7 @@ const ExpenseView: React.FC<ExpenseViewProps> = ({ members }) => {
                           </div>
                         </div>
                         <div>
-                          {isPayer ? (
-                            <i className="fa-solid fa-crown text-yellow-500/40 text-xs mr-2"></i>
-                          ) : isSettled ? (
-                            <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-paper/20 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark">已結清</button>
-                          ) : (isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? (
-                            <button disabled className="bg-paper/5 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark/40 border border-paper/10">已隨總額結清</button>
-                          ) : (
-                            <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-harbor/10 px-3 py-1.5 rounded-full text-[9px] font-bold text-harbor">標記結清</button>
-                          )}
+                          {isPayer ? <i className="fa-solid fa-crown text-yellow-500/40 text-xs mr-2"></i> : isSettled ? <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-paper/20 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark">已結清</button> : (isCoveredByPastGlobalSettlement || isCurrentlyZeroDebt) ? <button disabled className="bg-paper/5 px-3 py-1.5 rounded-full text-[9px] font-bold text-earth-dark/40 border border-paper/10">已隨總額結清</button> : <button onClick={() => toggleMemberSettled(selectedExpense, id)} className="bg-harbor/10 px-3 py-1.5 rounded-full text-[9px] font-bold text-harbor">標記結清</button>}
                         </div>
                       </div>
                     );

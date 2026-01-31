@@ -6,9 +6,10 @@ import { dbService } from '../firebaseService';
 
 interface BookingsViewProps {
   isEditMode?: boolean;
+  onToggleLock?: () => void;
 }
 
-const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
+const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode, onToggleLock }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeTab, setActiveTab] = useState<BookingType>('flight');
   const [expandedFlightId, setExpandedFlightId] = useState<string | null>(null);
@@ -42,7 +43,6 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
           ...editingBooking, 
           details: { ...editingBooking.details, image: reader.result as string } 
         });
-        // 重要：清除 input 的值
         e.target.value = '';
       };
       reader.readAsDataURL(file);
@@ -210,7 +210,6 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
       >
         <div className="bg-white rounded-[2rem] overflow-hidden shadow-xl border border-black/5 transition-all duration-500 relative flex flex-col">
           <div className="flex items-stretch min-h-[150px]">
-            {/* 左側 Sidebar - 配合扁平化高度 */}
             <div className="w-[85px] bg-harbor flex flex-col items-center justify-center py-6 gap-3 relative border-r border-dashed border-white/30">
               <i className="fa-solid fa-train text-white text-2xl"></i>
               <div className="flex-grow flex items-center justify-center">
@@ -220,11 +219,9 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
               </div>
             </div>
 
-            {/* 右側內容 - 扁平化 padding 調整 */}
             <div className="flex-grow p-5 flex flex-col justify-between">
-              {/* 頂部：標題與動作 */}
               <div className="flex justify-between items-start">
-                <h3 className="text-xl font-bold text-[#577C8E] tracking-tight leading-none pt-1">{ticket.title}</h3>
+                <h3 className="text-xl font-bold text-harbor tracking-tight leading-none pt-1">{ticket.title}</h3>
                 {isEditMode && (
                   <div className="flex gap-2">
                     <button 
@@ -243,7 +240,6 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
                 )}
               </div>
 
-              {/* 中間：路徑與時間 */}
               <div className="mt-2 flex flex-col">
                 <div className="flex justify-between items-end mb-0.5 px-1">
                   <div className="flex flex-col">
@@ -258,7 +254,6 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
 
                 <div className="flex justify-between items-center py-1">
                    <div className="text-xl font-bold text-ink">{ticket.details.depTime || '--:--'}</div>
-                   
                    <div className="flex-grow mx-3 flex flex-col items-center justify-center">
                       <div className="w-full flex items-center gap-1">
                          <div className="flex-grow h-px border-t border-dashed border-slate/30"></div>
@@ -266,12 +261,10 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
                          <div className="flex-grow h-px border-t border-dashed border-slate/30"></div>
                       </div>
                    </div>
-
                    <div className="text-xl font-bold text-ink">{ticket.details.arrTime || '--:--'}</div>
                 </div>
               </div>
 
-              {/* 底部：日期與座位 */}
               <div className="pt-2 border-t border-black/5 flex justify-between items-center mt-2 px-0.5">
                 <span className="text-[10px] font-bold text-earth-dark">{ticket.date}</span>
                 <span className="text-[8px] font-bold text-earth-dark uppercase tracking-widest">
@@ -281,7 +274,6 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
             </div>
           </div>
 
-          {/* 展開區塊 (乘車備註) */}
           <div className={`overflow-hidden transition-all duration-500 bg-white ${isExpanded ? 'max-h-[300px] border-t border-black/5' : 'max-h-0'}`}>
             <div className="p-6">
               <div className="bg-cream/10 p-5 rounded-3xl border border-paper/10">
@@ -407,10 +399,18 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
 
   return (
     <div className="pb-36 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
-      <div className="pt-8 flex justify-between items-end">
-        <div>
+      <div className="pt-2 flex justify-between items-start">
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold text-ink tracking-tight">行程預訂</h1>
-          <p className="text-earth-dark mt-1 font-bold italic">集結所有旅遊憑證與驚喜</p>
+          {onToggleLock && (
+            <button 
+              onClick={onToggleLock}
+              className="opacity-0 hover:opacity-100 active:opacity-100 focus:opacity-100 transition-opacity p-2 -ml-1"
+              title={isEditMode ? "鎖定視圖" : "開啟編輯"}
+            >
+              <i className={`fa-solid ${isEditMode ? 'fa-lock-open text-stamp' : 'fa-lock text-ink/20'}`}></i>
+            </button>
+          )}
         </div>
         {isEditMode && (
           <button 
@@ -418,11 +418,15 @@ const BookingsView: React.FC<BookingsViewProps> = ({ isEditMode }) => {
               setEditingBooking({ details: {}, date: new Date().toISOString().split('T')[0] });
               setShowAddModal(true);
             }}
-            className="w-14 h-14 bg-stamp text-white rounded-[1.75rem] shadow-xl flex items-center justify-center text-2xl active:scale-90 transition-all border-4 border-white"
+            className="w-12 h-12 bg-stamp text-white rounded-[1.5rem] shadow-lg flex items-center justify-center text-xl active:scale-90 transition-all border-2 border-white"
           >
             <i className="fa-solid fa-plus"></i>
           </button>
         )}
+      </div>
+      
+      <div className="px-1 -mt-4">
+        <p className="text-earth-dark font-bold italic text-xs">集結所有旅遊憑證與驚喜</p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">

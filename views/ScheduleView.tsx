@@ -22,6 +22,7 @@ interface DayData {
 
 interface ScheduleViewProps {
   isEditMode?: boolean;
+  onToggleLock?: () => void;
 }
 
 const shiftTimeStr = (timeStr: string, minutes: number): string => {
@@ -48,7 +49,7 @@ const fixToTraditional = (text: string) => {
   return fixed;
 };
 
-const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
+const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock }) => {
   const [fullSchedule, setFullSchedule] = useState<Record<string, DayData>>({});
 
   useEffect(() => {
@@ -56,7 +57,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
       if (data && typeof data === 'object') {
         setFullSchedule(data);
       } else if (data === undefined) {
-        // 當完全沒有行程資料時，初始化為空物件
         setFullSchedule({});
         dbService.updateField('schedule', {});
       }
@@ -241,13 +241,20 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
 
   return (
     <div className="pb-24 px-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-x-hidden">
-      <div className="pt-4 flex justify-between items-center px-1">
-        <div>
+      <div className="pt-2 flex justify-between items-center px-1">
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold text-ink tracking-tight">行程日誌</h1>
-          <p className="text-earth-dark mt-1 font-bold">{timeLeft}</p>
+          {onToggleLock && (
+            <button 
+              onClick={onToggleLock}
+              className="opacity-0 hover:opacity-100 active:opacity-100 focus:opacity-100 transition-opacity p-2 -ml-1"
+              title={isEditMode ? "鎖定視圖" : "開啟編輯"}
+            >
+              <i className={`fa-solid ${isEditMode ? 'fa-lock-open text-stamp' : 'fa-lock text-ink/20'}`}></i>
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
-           <span className="text-[10px] font-bold text-earth-dark uppercase tracking-[0.15em] whitespace-nowrap">目的地</span>
            <button 
              onClick={() => isEditMode && selectedDate && (setTempMetadata({...currentDayData!.metadata}), setSearchQuery(''), setShowWeatherModal(true))}
              disabled={!selectedDate && isEditMode}
@@ -257,6 +264,10 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
              {isEditMode && selectedDate && <i className="fa-solid fa-pen text-[9px] opacity-40"></i>}
            </button>
         </div>
+      </div>
+      
+      <div className="px-1 -mt-4">
+        <p className="text-earth-dark font-bold text-xs">{timeLeft}</p>
       </div>
 
       <div className="space-y-2 overflow-x-hidden px-1">
@@ -367,7 +378,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
               </div>
             </div>
 
-            {/* 搜尋後的氣象預覽卡片 */}
             <div className="px-1 animate-in fade-in slide-in-from-top-2 duration-300">
               {tempMetadata.forecast && tempMetadata.forecast.length > 0 && tempMetadata.isLive ? (
                 <div className="bg-white p-6 rounded-4xl border-2 border-paper shadow-lg flex items-center justify-between">
@@ -406,7 +416,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
         )}
       </Modal>
 
-      {/* 批量時間調整 Modal */}
       <Modal isOpen={showTimeShiftModal} onClose={() => setShowTimeShiftModal(false)} title="批量調整時間">
         <div className="space-y-6 px-1 pb-4">
           <p className="text-xs text-ink font-bold leading-relaxed">一次將本日所有行程提前或延後。</p>
@@ -422,7 +431,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
         </div>
       </Modal>
 
-      {/* 管理行程日期 Modal */}
       <Modal isOpen={showManageDatesModal} onClose={() => {setShowManageDatesModal(false); setDateToEdit(null);}} title="管理行程日期">
         <div className="space-y-4 overflow-x-hidden">
           <div className="space-y-3 max-h-[55vh] overflow-y-auto no-scrollbar pr-1 pb-2">
@@ -443,7 +451,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
         </div>
       </Modal>
 
-      {/* 新增日期 Modal */}
       <Modal isOpen={showDateModal} onClose={() => setShowDateModal(false)} title="新增日期">
         <div className="space-y-4 overflow-x-hidden px-1 pb-4">
           <input type="date" value={newDateInput} onChange={(e) => setNewDateInput(e.target.value)} className="w-full h-[56px] p-6 bg-white border-2 border-paper rounded-[2rem] font-bold text-ink text-center" />
@@ -451,7 +458,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode }) => {
         </div>
       </Modal>
 
-      {/* 行程項目編輯 Modal */}
       <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="行程細節設定">
         {editingItem && (
           <div className="space-y-6 px-1 pb-6 overflow-x-hidden">

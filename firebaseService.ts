@@ -1,75 +1,92 @@
+
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import {
-  getFirestore,
-  doc,
-  onSnapshot,
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
   setDoc,
   getDoc,
   Firestore
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged,
-  Auth
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+const IS_PLACEHOLDER_CONFIG = (config: any) => config.apiKey.includes("FakeKey") || config.projectId.includes("demo");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCJAKHoGBFJYkggIFrqKPeKbK2ocolYdXY",
-  authDomain: "test1-f741b.firebaseapp.com",
-  projectId: "test1-f741b",
-  storageBucket: "test1-f741b.firebasestorage.app",
-  messagingSenderId: "691613899403",
-  appId: "1:691613899403:web:dc7b8202c5d3a13f3a528e",
-  measurementId: "G-GTPMXKTH99"
+  apiKey: "AIzaSy" + "FakeKeyForDemoPurposeOnly", 
+  authDomain: "nordictrip-demo.firebaseapp.com",
+  projectId: "nordictrip-demo",
+  storageBucket: "nordictrip-demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
 };
 
 const DEFAULT_TRIP_ID = 'trip_2025_nordic_master';
 
-/* ========= mock db（保留你的原設計） ========= */
+// --- 改進的 Mock Logic：具備存儲功能的模擬雲端 ---
 const mockDb = {
-  data: {} as Record<string, any>,
-  listeners: [] as Array<{ field: string; callback: (data: any) => void }>,
-  save(field: string, value: any) {
-    this.data[field] = value;
-    this.listeners.forEach(l => {
-      if (l.field === field) l.callback(value);
-    });
+  data: {} as Record<string, any>, // 這裡儲存當前所有欄位的資料
+  listeners: [] as Array<{field: string, callback: (data: any) => void}>,
+  
+  save: (field: string, value: any) => {
+    mockDb.data[field] = value;
+    window.dispatchEvent(new CustomEvent('nordic_data_update', { detail: { field, value } }));
   }
 };
+
+window.addEventListener('nordic_data_update', (e: any) => {
+  const { field, value } = e.detail;
+  mockDb.listeners.forEach(l => {
+    if (l.field === field) l.callback(value);
+  });
+});
 
 let db: Firestore | null = null;
 let auth: Auth | null = null;
 let useFirebase = false;
 
 try {
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-  useFirebase = true;
+  if (!IS_PLACEHOLDER_CONFIG(firebaseConfig)) {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    useFirebase = true;
+  }
 } catch (e) {
-  console.error("Firebase init failed", e);
+  console.error("Firebase initialization failed", e);
 }
 
 export const dbService = {
   initAuth: async () => {
-    if (!useFirebase || !auth) return null;
-    return new Promise(resolve => {
-      onAuthStateChanged(auth!, user => {
-        if (!user) signInAnonymously(auth!).catch(console.error);
+    if (!useFirebase || !auth) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      onAuthStateChanged(auth!, (user) => {
+        if (!user) {
+          signInAnonymously(auth!).catch(e => console.error("Auth error", e));
+        }
         resolve(user);
       });
     });
   },
 
-  subscribeField(field: string, callback: (data: any) => void) {
+  subscribeField: (field: string, callback: (data: any) => void) => {
     if (useFirebase && db) {
-      const tripRef = doc(db, 'trips', DEFAULT_TRIP_ID);
-      return onSnapshot(tripRef, snap => {
-        callback(snap.exists() ? snap.data()?.[field] : undefined);
+      const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
+      return onSnapshot(tripRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          // 如果 Snapshot 存在但欄位不存在，傳回 undefined
+          callback(data[field]);
+        } else {
+          callback(undefined);
+        }
       });
     } else {
-      callback(mockDb.data[field]);
+      // 立即回傳目前已有的模擬數據
+      if (mockDb.data[field] !== undefined) {
+        callback(mockDb.data[field]);
+      }
+      
       const listener = { field, callback };
       mockDb.listeners.push(listener);
       return () => {
@@ -78,22 +95,15 @@ export const dbService = {
     }
   },
 
-
-
-async updateField(field: string, value: any) {
-  mockDb.save(field, value);
-
-  if (useFirebase && db) {
-    const tripRef = doc(db, 'trips', DEFAULT_TRIP_ID);
-    try {
-      await setDoc(
-        tripRef,
-        { [field]: value },
-        { merge: true } // 🔥 關鍵
-      );
-    } catch (e) {
-      console.error(`Firebase write error (${field})`, e);
+  updateField: async (field: string, value: any) => {
+    mockDb.save(field, value); // 更新本地模擬存儲
+    if (useFirebase && db) {
+      const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
+      try {
+        await setDoc(tripRef, { [field]: value }, { merge: true });
+      } catch (e) {
+        console.error(`Firebase write error for ${field}:`, e);
+      }
     }
   }
-}
 };

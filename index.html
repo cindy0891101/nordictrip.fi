@@ -31,10 +31,14 @@
             background-attachment: fixed;
             -webkit-tap-highlight-color: transparent;
             overflow-x: hidden;
-            width: 100%;
+            width: 100vw;
             position: relative;
             touch-action: pan-y;
             color: #2B2C2B;
+            
+            /* iOS Safe Area Handling */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
         }
         .nordic-shadow {
             box-shadow: 6px 6px 0px rgba(142, 156, 163, 0.2);
@@ -72,10 +76,6 @@
         .font-extralight {
             font-weight: 200;
         }
-        html, body {
-    height: 100%;
-    overflow: hidden; /* 關鍵：禁止 body 滾動 */
-}
     </style>
     <script>
         tailwind.config = {

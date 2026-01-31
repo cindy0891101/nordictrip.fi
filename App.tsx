@@ -26,7 +26,6 @@ const App: React.FC = () => {
       if (data && Array.isArray(data)) {
         setMembers(data);
       } else if (data === undefined) {
-        // 初始狀態為空陣列
         dbService.updateField('members', []);
       }
     });
@@ -95,23 +94,29 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'schedule': return <ScheduleView isEditMode={isEditMode} />;
-      case 'bookings': return <BookingsView isEditMode={isEditMode} />;
-      case 'expense': return <ExpenseView members={members || []} />;
-      case 'planning': return <PlanningView members={members || []} />;
-      case 'members': return (
-        <MembersView 
-          members={members || []} 
-          onAddMember={addMember} 
-          onUpdateAvatar={updateMemberAvatar}
-          onDeleteMember={deleteMember}
-          onUpdateMemberInfo={updateMemberInfo}
-          isEditMode={isEditMode}
-          driveUrl={sharedDriveUrl}
-          onUpdateDriveUrl={updateSharedDriveUrl}
-        />
-      );
-      default: return <ScheduleView isEditMode={isEditMode} />;
+      case 'schedule': 
+        return <ScheduleView isEditMode={isEditMode} onToggleLock={handleToggleLock} />;
+      case 'bookings': 
+        return <BookingsView isEditMode={isEditMode} onToggleLock={handleToggleLock} />;
+      case 'expense': 
+        return <ExpenseView members={members || []} />;
+      case 'planning': 
+        return <PlanningView members={members || []} />;
+      case 'members': 
+        return (
+          <MembersView 
+            members={members || []} 
+            onAddMember={addMember} 
+            onUpdateAvatar={updateMemberAvatar}
+            onDeleteMember={deleteMember}
+            onUpdateMemberInfo={updateMemberInfo}
+            isEditMode={isEditMode}
+            onToggleLock={handleToggleLock}
+            driveUrl={sharedDriveUrl}
+            onUpdateDriveUrl={updateSharedDriveUrl}
+          />
+        );
+      default: return <ScheduleView isEditMode={isEditMode} onToggleLock={handleToggleLock} />;
     }
   };
 
@@ -123,27 +128,12 @@ const App: React.FC = () => {
     { id: 'members', icon: 'fa-user-group', label: '成員' }
   ];
 
-  const showLockButton = activeTab === 'schedule' || activeTab === 'bookings' || activeTab === 'members';
-
   return (
-    <div className="max-w-lg mx-auto bg-cream overflow-x-hidden relative flex flex-col">
-      {/* Header modified for iOS Status Bar Area */}
-      <header className="px-4 pt-[env(safe-area-inset-top)] flex justify-end items-center h-[calc(3.5rem+env(safe-area-inset-top))] flex-shrink-0">
-        {showLockButton ? (
-          <button 
-            onClick={handleToggleLock}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm border-2 ${
-              isEditMode ? 'bg-stamp text-cream border-cream' : 'bg-white text-ink border-paper'
-            }`}
-          >
-            <i className={`fa-solid ${isEditMode ? 'fa-lock-open' : 'fa-lock'}`}></i>
-          </button>
-        ) : (
-          <div className="w-10 h-10"></div>
-        )}
-      </header>
+    <div className="min-h-screen max-w-lg mx-auto bg-cream overflow-x-hidden relative flex flex-col">
+      {/* iOS Status Bar Spacer */}
+      <div className="pt-[env(safe-area-inset-top)] flex-shrink-0" />
 
-      {/* Main content with padding adjustment for Fixed Nav + Safe Area */}
+      {/* Main content with padding adjustment */}
       <main className="w-full flex-grow overflow-x-hidden pb-[calc(6rem+env(safe-area-inset-bottom))]">
         {renderContent()}
       </main>
@@ -166,7 +156,7 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Nav with Safe Area handling in glass-nav class via index.html CSS */}
+      {/* Nav with Safe Area handling */}
       <nav className="fixed bottom-0 left-0 right-0 glass-nav z-50">
         <div className="max-w-lg mx-auto flex justify-around items-center h-20 px-4">
           {navItems.map((item) => {
