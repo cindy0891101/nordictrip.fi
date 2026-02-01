@@ -1,7 +1,7 @@
 
 {
   "name": "Nordic Trip - 奶油風旅遊規劃",
-  "short_name": "Nordic Trip",
+  "short_name": "玟儒旅行團",
   "description": "高品質、溫暖色調的團體旅遊規劃工具。",
   "start_url": "/",
   "display": "standalone",
@@ -10,12 +10,12 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/826/826070.png",
+      "src": "https://cindy0891101.github.io/my-app-icons/icon/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/826/826070.png",
+      "src": "https://cindy0891101.github.io/my-app-icons/icon/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
