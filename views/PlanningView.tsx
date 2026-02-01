@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { NordicButton, NordicCard, Modal } from '../components/Shared';
 import { TodoItem, ChecklistItem, Member, PackingCategory } from '../types';
@@ -44,7 +43,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     if (members.length > 0 && !currentAuthorId) {
       setCurrentAuthorId(members[0].id);
     }
-  }, [members]);
+  }, [members, currentAuthorId]);
 
   useEffect(() => {
     const unsubTodo = dbService.subscribeField('todos', (data) => setTodos(data || []));
@@ -68,18 +67,25 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   };
 
   const handlePostInfo = () => {
-    if (!infoText.trim() && !infoImage) return;
+    const trimmedText = infoText.trim();
+    if (!trimmedText && !infoImage) return;
     if (!currentAuthorId) {
       alert("請先前往『成員』分頁新增旅伴");
       return;
     }
+
     const newInfo: TravelInfo = {
       id: Date.now().toString(),
-      text: infoText,
+      text: trimmedText,
       authorId: currentAuthorId,
-      imageUrl: infoImage || undefined,
       createdAt: Date.now()
     };
+    
+    // 修正：Firestore 不支援 undefined，僅在有值時添加屬性
+    if (infoImage) {
+      newInfo.imageUrl = infoImage;
+    }
+
     const next = [newInfo, ...travelInfos];
     updatePlanningCloud('travelInfos', next);
     setInfoText('');
@@ -104,8 +110,9 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   };
 
   const handleAddTodo = () => {
-    if (!todoInput.text) return;
-    const next = [{ id: Date.now().toString(), text: todoInput.text, completed: false, assignedTo: todoInput.assignedTo }, ...todos];
+    const trimmedText = todoInput.text.trim();
+    if (!trimmedText) return;
+    const next = [{ id: Date.now().toString(), text: trimmedText, completed: false, assignedTo: todoInput.assignedTo }, ...todos];
     updatePlanningCloud('todos', next);
     setShowAddTodo(false);
     setTodoInput({ text: '', assignedTo: 'ALL' });
@@ -116,22 +123,32 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
   };
 
   const handleAddItem = () => {
-    if (!selectedMemberId || !newItem.text) return;
+    const trimmedText = newItem.text.trim();
+    if (!selectedMemberId || !trimmedText) return;
+    
+    const targetTab = activeTab as 'packing' | 'shopping';
+    
+    // 修正：Firestore 不支援屬性值為 undefined
     const item: ChecklistItem = { 
       id: Date.now().toString(), 
-      text: newItem.text, 
+      text: trimmedText, 
       completed: false, 
-      ownerId: selectedMemberId, 
-      category: activeTab === 'packing' ? newItem.category : undefined 
+      ownerId: selectedMemberId
     };
-    const targetTab = activeTab as 'packing' | 'shopping';
+
+    if (activeTab === 'packing') {
+      item.category = newItem.category;
+    }
+
+    const currentMemberData = listData[selectedMemberId] || { packing: [], shopping: [] };
     const next = { 
       ...listData, 
       [selectedMemberId]: { 
-        ...(listData[selectedMemberId] || { packing: [], shopping: [] }), 
-        [targetTab]: [...(listData[selectedMemberId]?.[targetTab] || []), item] 
+        ...currentMemberData, 
+        [targetTab]: [...(currentMemberData[targetTab] || []), item] 
       } 
     };
+    
     updatePlanningCloud('listData', next);
     setShowAddItemModal(false);
     setNewItem({ ...newItem, text: '' });
@@ -145,7 +162,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     const next = {
       ...listData,
       [selectedMemberId]: {
-        ...(listData[selectedMemberId] || {}),
+        ...(listData[selectedMemberId] || { packing: [], shopping: [] }),
         [targetTab]: nextList
       }
     };
@@ -159,7 +176,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ members }) => {
     const next = {
       ...listData,
       [selectedMemberId]: {
-        ...(listData[selectedMemberId] || {}),
+        ...(listData[selectedMemberId] || { packing: [], shopping: [] }),
         [targetTab]: nextList
       }
     };

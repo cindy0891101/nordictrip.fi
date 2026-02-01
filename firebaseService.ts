@@ -13,13 +13,13 @@ import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://ww
 const IS_PLACEHOLDER_CONFIG = (config: any) => config.apiKey.includes("FakeKey") || config.projectId.includes("demo");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBEIQqyjG3SATa3PlWVF6ecyUT7yIq8Xi4",
-  authDomain: "test2-b8faf.firebaseapp.com",
-  projectId: "test2-b8faf",
-  storageBucket: "test2-b8faf.firebasestorage.app",
-  messagingSenderId: "974362758423",
-  appId: "1:974362758423:web:77b3500f5aaf56dfeffb52",
-  measurementId: "G-GW0MHYK76H"
+  apiKey: "AIzaSyChx0Ro7ArYxM1CQcBf41mq63p4AEVWZC4",
+  authDomain: "fi-travel.firebaseapp.com",
+  projectId: "fi-travel",
+  storageBucket: "fi-travel.firebasestorage.app",
+  messagingSenderId: "158292900207",
+  appId: "1:158292900207:web:40d53c028906d66b88109a",
+  measurementId: "G-GC0JGS4LJB"
 };
 
 const DEFAULT_TRIP_ID = 'trip_2025_nordic_master';

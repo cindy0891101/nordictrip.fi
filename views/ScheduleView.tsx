@@ -438,7 +438,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
               <div key={date} className="bg-white p-4 rounded-[2rem] border-2 border-paper flex items-center justify-between shadow-sm hover:border-harbor/50 transition-all">
                 {dateToEdit === date ? (
                   <div className="flex gap-2 w-full items-center min-w-0">
-                    <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="w-full h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
+                    <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
                     <button onClick={() => { if (!dateRenameInput || fullSchedule[dateRenameInput]) { setDateToEdit(null); return; } const next = { ...fullSchedule }; next[dateRenameInput] = next[date]; delete next[date]; updateScheduleCloud(next); setDateToEdit(null); }} className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"><i className="fa-solid fa-check text-sm"></i></button>
                   </div>
                 ) : (
