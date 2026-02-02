@@ -436,72 +436,75 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
           <div className="space-y-3 max-h-[55vh] overflow-y-auto no-scrollbar pr-1 pb-2">
             {dates.map(date => (
               <div key={date} className="bg-white p-4 rounded-[2rem] border-2 border-paper flex items-center justify-between shadow-sm hover:border-harbor/50 transition-all">
-                {dateToEdit === date ? (
-                  <div className="flex gap-2 w-full items-center min-w-0">
-                    <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
-                    <button
-  onClick={() => {
-    const newDate = dateRenameInput;
+               {dateToEdit === date ? (
+  <div className="flex gap-2 w-full items-center min-w-0">
+    <input
+      type="date"
+      value={dateRenameInput || date}
+      onChange={(e) => setDateRenameInput(e.target.value)}
+      className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none"
+    />
 
-    // 1️⃣ 防呆：沒改 or 相同
-    if (!newDate || newDate === date) {
-      setDateToEdit(null);
-      setDateRenameInput('');
-      return;
-    }
+    <button
+      onClick={() => {
+        const newDate = dateRenameInput;
 
-    // 2️⃣ 防止撞日期
-    if (fullSchedule[newDate]) {
-      alert('此日期已存在');
-      return;
-    }
+        if (!newDate || newDate === date) {
+          setDateToEdit(null);
+          setDateRenameInput('');
+          return;
+        }
 
-    // 3️⃣ 真正 rename（key 轉移）
-    const next = { ...fullSchedule };
-    next[newDate] = next[date];
-    delete next[date];
+        if (fullSchedule[newDate]) {
+          alert('此日期已存在');
+          return;
+        }
 
-    // 4️⃣ ⚠️ 關鍵：同步 selectedDate
-    if (selectedDate === date) {
-      setSelectedDate(newDate);
-    }
+        const next = { ...fullSchedule };
+        next[newDate] = next[date];
+        delete next[date];
 
-    // 5️⃣ 寫回 Firebase
-    updateScheduleCloud(next);
+        if (selectedDate === date) {
+          setSelectedDate(newDate);
+        }
 
-    // 6️⃣ 清理狀態
-    setDateToEdit(null);
-    setDateRenameInput('');
-  }}
-  className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"
->
-  <i className="fa-solid fa-check text-sm"></i>
-</button>
-          <button
-  onClick={() => {
-    const allDates = Object.keys(fullSchedule);
+        updateScheduleCloud(next);
+        setDateToEdit(null);
+        setDateRenameInput('');
+      }}
+      className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"
+    >
+      <i className="fa-solid fa-check text-sm"></i>
+    </button>
 
-    // 至少要保留一天
-    if (allDates.length <= 1) return;
+    <button
+      onClick={() => {
+        const allDates = Object.keys(fullSchedule);
+        if (allDates.length <= 1) return;
 
-    // 1️⃣ 建立新 schedule（真的刪 key）
-    const next = { ...fullSchedule };
-    delete next[date];
+        const next = { ...fullSchedule };
+        delete next[date];
 
-    // 2️⃣ 如果刪的是目前選中的日期，一定要修正 selectedDate
-    if (selectedDate === date) {
-      const remainingDates = Object.keys(next).sort();
-      setSelectedDate(remainingDates[0] || '');
-    }
+        if (selectedDate === date) {
+          const remainingDates = Object.keys(next).sort();
+          setSelectedDate(remainingDates[0] || '');
+        }
 
-    // 3️⃣ 再寫回雲端（順序很重要）
-    updateScheduleCloud(next);
-  }}
-  className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"
->
-  <i className="fa-solid fa-trash-can text-xs"></i>
-</button>
-                )}
+        updateScheduleCloud(next);
+      }}
+      className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"
+    >
+      <i className="fa-solid fa-trash-can text-xs"></i>
+    </button>
+  </div>
+) : (
+  <div className="flex flex-col pl-2">
+    <span className="text-base font-bold text-ink tracking-tight">{date}</span>
+    <span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">
+      {(fullSchedule[date]?.items?.length || 0)} 項目
+    </span>
+  </div>
+)}
               </div>
             ))}
           </div>
