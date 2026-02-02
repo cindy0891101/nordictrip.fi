@@ -33,31 +33,26 @@ self.addEventListener('activate', (event) => {
 
 /* ---------- 攔截請求 ---------- */
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
+  const request = event.request;
+  const url = new URL(request.url);
 
-  // ✅ Firebase / Google API 一律直連網路
-  if (url.includes('firebase') || url.includes('googleapis')) {
-    return event.respondWith(fetch(event.request));
+  // Firebase / Google API 一律走網路
+  if (url.origin.includes('googleapis') || url.origin.includes('firebase')) {
+    return event.respondWith(fetch(request));
   }
 
-  // ✅ 靜態資源：Cache First
+  // 只處理 GET
+  if (request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    caches.match(request).then((cached) => {
       if (cached) return cached;
 
-      return fetch(event.request).then((response) => {
-        // 只快取成功的 GET 請求
-        if (
-          response &&
-          response.status === 200 &&
-          event.request.method === 'GET'
-        ) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+      return fetch(request).catch(() => {
+        // ⭐⭐⭐ 關鍵：HTML fallback
+        if (request.mode === 'navigate') {
+          return caches.match('/index.html');
         }
-        return response;
       });
     })
   );
