@@ -442,7 +442,34 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
                     <button onClick={() => { if (!dateRenameInput || fullSchedule[dateRenameInput]) { setDateToEdit(null); return; } const next = { ...fullSchedule }; next[dateRenameInput] = next[date]; delete next[date]; updateScheduleCloud(next); setDateToEdit(null); }} className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"><i className="fa-solid fa-check text-sm"></i></button>
                   </div>
                 ) : (
-                  <><div className="flex flex-col pl-2"><span className="text-base font-bold text-ink tracking-tight">{date}</span><span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">{(fullSchedule[date]?.items?.length || 0)} 項目</span></div><div className="flex gap-2"><button onClick={() => { setDateToEdit(date); setDateRenameInput(date); }} className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm"><i className="fa-solid fa-pen text-xs"></i></button><button onClick={() => { if (dates.length > 1) { const next = { ...fullSchedule }; delete next[date]; updateScheduleCloud(next); } }} className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"><i className="fa-solid fa-trash-can text-xs"></i></button></div></>
+                  <><div className="flex flex-col pl-2"><span className="text-base font-bold text-ink tracking-tight">{date}</span><span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">{(fullSchedule[date]?.items?.length || 0)} 項目</span></div><div className="flex gap-2"><button onClick={() => { setDateToEdit(date); setDateRenameInput(date); }} className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm"><i className="fa-solid fa-pen text-xs"></i>
+                  </button>
+          <button
+  onClick={() => {
+    const allDates = Object.keys(fullSchedule);
+
+    // 至少要保留一天
+    if (allDates.length <= 1) return;
+
+    // 1️⃣ 建立新 schedule（真的刪 key）
+    const next = { ...fullSchedule };
+    delete next[date];
+
+    // 2️⃣ 如果刪的是目前選中的日期，一定要修正 selectedDate
+    if (selectedDate === date) {
+      const remainingDates = Object.keys(next).sort();
+      setSelectedDate(remainingDates[0] || '');
+    }
+
+    // 3️⃣ 再寫回雲端（順序很重要）
+    updateScheduleCloud(next);
+  }}
+  className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"
+>
+  <i className="fa-solid fa-trash-can text-xs"></i>
+</button>
+                  </div>
+                  </>
                 )}
               </div>
             ))}
