@@ -439,11 +439,44 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
                 {dateToEdit === date ? (
                   <div className="flex gap-2 w-full items-center min-w-0">
                     <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
-                    <button onClick={() => { if (!dateRenameInput || fullSchedule[dateRenameInput]) { setDateToEdit(null); return; } const next = { ...fullSchedule }; next[dateRenameInput] = next[date]; delete next[date]; updateScheduleCloud(next); setDateToEdit(null); }} className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"><i className="fa-solid fa-check text-sm"></i></button>
-                  </div>
-                ) : (
-                  <><div className="flex flex-col pl-2"><span className="text-base font-bold text-ink tracking-tight">{date}</span><span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">{(fullSchedule[date]?.items?.length || 0)} 項目</span></div><div className="flex gap-2"><button onClick={() => { setDateToEdit(date); setDateRenameInput(date); }} className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm"><i className="fa-solid fa-pen text-xs"></i>
-                  </button>
+                    <button
+  onClick={() => {
+    const newDate = dateRenameInput;
+
+    // 1️⃣ 防呆：沒改 or 相同
+    if (!newDate || newDate === date) {
+      setDateToEdit(null);
+      setDateRenameInput('');
+      return;
+    }
+
+    // 2️⃣ 防止撞日期
+    if (fullSchedule[newDate]) {
+      alert('此日期已存在');
+      return;
+    }
+
+    // 3️⃣ 真正 rename（key 轉移）
+    const next = { ...fullSchedule };
+    next[newDate] = next[date];
+    delete next[date];
+
+    // 4️⃣ ⚠️ 關鍵：同步 selectedDate
+    if (selectedDate === date) {
+      setSelectedDate(newDate);
+    }
+
+    // 5️⃣ 寫回 Firebase
+    updateScheduleCloud(next);
+
+    // 6️⃣ 清理狀態
+    setDateToEdit(null);
+    setDateRenameInput('');
+  }}
+  className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"
+>
+  <i className="fa-solid fa-check text-sm"></i>
+</button>
           <button
   onClick={() => {
     const allDates = Object.keys(fullSchedule);
