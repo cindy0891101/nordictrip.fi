@@ -4,6 +4,7 @@
   "short_name": "玟儒旅行團",
   "description": "高品質、溫暖色調的團體旅遊規劃工具。",
   "start_url": "/index.html",
+   "scope": "/",
   "display": "standalone",
   "background_color": "#E7DDD3",
   "theme_color": "#577C8E",
