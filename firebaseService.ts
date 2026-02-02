@@ -6,7 +6,8 @@ import {
   onSnapshot, 
   setDoc,
   updateDoc,
-  Firestore
+  Firestore,
+  enableIndexedDbPersistence
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
@@ -50,6 +51,13 @@ try {
   if (!IS_PLACEHOLDER_CONFIG(firebaseConfig)) {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('多分頁同時開啟，Firestore 離線快取只能啟用一個');
+  } else if (err.code === 'unimplemented') {
+    console.warn('此瀏覽器不支援 IndexedDB');
+  }
+});
     auth = getAuth(app);
     useFirebase = true;
   }
