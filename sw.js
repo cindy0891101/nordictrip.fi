@@ -3,7 +3,6 @@ const CACHE_NAME = 'nordic-trip-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/main.js',
   '/manifest.json'
 ];
 
