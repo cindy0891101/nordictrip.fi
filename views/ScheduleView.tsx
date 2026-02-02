@@ -502,7 +502,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
   <i className="fa-solid fa-trash-can text-xs"></i>
 </button>
                   </div>
-                  </>
                 )}
               </div>
             ))}
