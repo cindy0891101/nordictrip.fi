@@ -431,124 +431,25 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
         </div>
       </Modal>
 
-      <Modal
-  isOpen={showManageDatesModal}
-  onClose={() => {
-    setShowManageDatesModal(false);
-    setDateToEdit(null);
-    setDateRenameInput('');
-  }}
-  title="管理行程日期"
->
-  <div className="space-y-4 overflow-x-hidden">
-    <div className="space-y-3 max-h-[55vh] overflow-y-auto no-scrollbar pr-1 pb-2">
-      {dates.map((date) => (
-        <div
-          key={date}
-          className="bg-white p-4 rounded-[2rem] border-2 border-paper flex items-center justify-between shadow-sm hover:border-harbor/50 transition-all"
-        >
-          {dateToEdit === date ? (
-            /* ===== 編輯狀態 ===== */
-            <div className="flex gap-2 w-full items-center min-w-0">
-              <input
-                type="date"
-                value={dateRenameInput || date}
-                onChange={(e) => setDateRenameInput(e.target.value)}
-                className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none"
-              />
-
-              {/* ✔ 確認修改 */}
-              <button
-                onClick={() => {
-                  const newDate = dateRenameInput;
-
-                  // 沒改 or 相同
-                  if (!newDate || newDate === date) {
-                    setDateToEdit(null);
-                    setDateRenameInput('');
-                    return;
-                  }
-
-                  // 防止重複日期
-                  if (fullSchedule[newDate]) {
-                    alert('此日期已存在');
-                    return;
-                  }
-
-                  const next = { ...fullSchedule };
-                  next[newDate] = next[date];
-                  delete next[date];
-
-                  if (selectedDate === date) {
-                    setSelectedDate(newDate);
-                  }
-
-                  updateScheduleCloud(next);
-                  setDateToEdit(null);
-                  setDateRenameInput('');
-                }}
-                className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"
-              >
-                <i className="fa-solid fa-check text-sm"></i>
-              </button>
-
-              {/* 🗑 刪除日期 */}
-              <button
-                onClick={() => {
-                  const allDates = Object.keys(fullSchedule);
-                  if (allDates.length <= 1) return;
-
-                  const next = { ...fullSchedule };
-                  delete next[date];
-
-                  if (selectedDate === date) {
-                    const remainingDates = Object.keys(next).sort();
-                    setSelectedDate(remainingDates[0] || '');
-                  }
-
-                  updateScheduleCloud(next);
-                }}
-                className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"
-              >
-                <i className="fa-solid fa-trash-can text-xs"></i>
-              </button>
-            </div>
-          ) : (
-            /* ===== 顯示狀態（含 ✏️） ===== */
-            <>
-              <div className="flex flex-col pl-2">
-                <span className="text-base font-bold text-ink tracking-tight">
-                  {date}
-                </span>
-                <span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">
-                  {(fullSchedule[date]?.items?.length || 0)} 項目
-                </span>
+      <Modal isOpen={showManageDatesModal} onClose={() => {setShowManageDatesModal(false); setDateToEdit(null);}} title="管理行程日期">
+        <div className="space-y-4 overflow-x-hidden">
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto no-scrollbar pr-1 pb-2">
+            {dates.map(date => (
+              <div key={date} className="bg-white p-4 rounded-[2rem] border-2 border-paper flex items-center justify-between shadow-sm hover:border-harbor/50 transition-all">
+                {dateToEdit === date ? (
+                  <div className="flex gap-2 w-full items-center min-w-0">
+                    <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
+                    <button onClick={() => { if (!dateRenameInput || fullSchedule[dateRenameInput]) { setDateToEdit(null); return; } const next = { ...fullSchedule }; next[dateRenameInput] = next[date]; delete next[date]; updateScheduleCloud(next); setDateToEdit(null); }} className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"><i className="fa-solid fa-check text-sm"></i></button>
+                  </div>
+                ) : (
+                  <><div className="flex flex-col pl-2"><span className="text-base font-bold text-ink tracking-tight">{date}</span><span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">{(fullSchedule[date]?.items?.length || 0)} 項目</span></div><div className="flex gap-2"><button onClick={() => { setDateToEdit(date); setDateRenameInput(date); }} className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm"><i className="fa-solid fa-pen text-xs"></i></button><button onClick={() => { if (dates.length > 1) { const next = { ...fullSchedule }; delete next[date]; updateScheduleCloud(next); } }} className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"><i className="fa-solid fa-trash-can text-xs"></i></button></div></>
+                )}
               </div>
-
-              {/* ✏️ 編輯入口（你之前消失的地方） */}
-              <button
-                onClick={() => {
-                  setDateToEdit(date);
-                  setDateRenameInput(date);
-                }}
-                className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm active:scale-90"
-              >
-                <i className="fa-solid fa-pen text-xs"></i>
-              </button>
-            </>
-          )}
+            ))}
+          </div>
+          <NordicButton onClick={() => setShowManageDatesModal(false)} className="w-full py-4.5 text-sm font-bold">完成並返回</NordicButton>
         </div>
-      ))}
-    </div>
-
-    <NordicButton
-      onClick={() => setShowManageDatesModal(false)}
-      className="w-full py-4.5 text-sm font-bold"
-    >
-      完成並返回
-    </NordicButton>
-  </div>
-</Modal>
+      </Modal>
 
       <Modal isOpen={showDateModal} onClose={() => setShowDateModal(false)} title="新增日期">
         <div className="space-y-4 overflow-x-hidden px-1 pb-4">
