@@ -5,6 +5,8 @@ import {
   doc, 
   onSnapshot, 
   setDoc,
+  updateDoc,
+  deleteField,
   getDoc,
   Firestore
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
@@ -13,24 +15,25 @@ import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://ww
 const IS_PLACEHOLDER_CONFIG = (config: any) => config.apiKey.includes("FakeKey") || config.projectId.includes("demo");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyChx0Ro7ArYxM1CQcBf41mq63p4AEVWZC4",
-  authDomain: "fi-travel.firebaseapp.com",
-  projectId: "fi-travel",
-  storageBucket: "fi-travel.firebasestorage.app",
-  messagingSenderId: "158292900207",
-  appId: "1:158292900207:web:40d53c028906d66b88109a",
-  measurementId: "G-GC0JGS4LJB"
+  apiKey: "AIzaSy" + "FakeKeyForDemoPurposeOnly", 
+  authDomain: "nordictrip-demo.firebaseapp.com",
+  projectId: "nordictrip-demo",
+  storageBucket: "nordictrip-demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
 };
 
 const DEFAULT_TRIP_ID = 'trip_2025_nordic_master';
+const LOCAL_STORAGE_KEY = 'nordic_trip_mock_data';
 
-// --- 改進的 Mock Logic：具備存儲功能的模擬雲端 ---
+// --- 改進的 Mock Logic：增加 LocalStorage 持久化 ---
 const mockDb = {
-  data: {} as Record<string, any>, // 這裡儲存當前所有欄位的資料
+  data: JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') as Record<string, any>,
   listeners: [] as Array<{field: string, callback: (data: any) => void}>,
   
   save: (field: string, value: any) => {
     mockDb.data[field] = value;
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mockDb.data));
     window.dispatchEvent(new CustomEvent('nordic_data_update', { detail: { field, value } }));
   }
 };
@@ -76,17 +79,18 @@ export const dbService = {
       return onSnapshot(tripRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          // 如果 Snapshot 存在但欄位不存在，傳回 undefined
           callback(data[field]);
         } else {
           callback(undefined);
         }
       });
     } else {
-      // 立即回傳目前已有的模擬數據
-      if (mockDb.data[field] !== undefined) {
-        callback(mockDb.data[field]);
-      }
+      // 模擬環境：初次訂閱時回傳已存儲的資料
+      setTimeout(() => {
+        if (mockDb.data[field] !== undefined) {
+          callback(mockDb.data[field]);
+        }
+      }, 0);
       
       const listener = { field, callback };
       mockDb.listeners.push(listener);
@@ -97,13 +101,20 @@ export const dbService = {
   },
 
   updateField: async (field: string, value: any) => {
-    mockDb.save(field, value); // 更新本地模擬存儲
+    mockDb.save(field, value);
     if (useFirebase && db) {
       const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
       try {
-        await setDoc(tripRef, { [field]: value }, { merge: true });
-      } catch (e) {
-        console.error(`Firebase write error for ${field}:`, e);
+        // 使用 updateDoc(ref, field, value) 語法，這會直接替換整個欄位的值（如整個 schedule 物件）
+        // 而不是合併物件內部的 Key
+        await updateDoc(tripRef, field, value);
+      } catch (e: any) {
+        if (e.code === 'not-found') {
+          // 如果文件完全不存在，才使用 setDoc 建立
+          await setDoc(tripRef, { [field]: value });
+        } else {
+          console.error(`Firebase write error for ${field}:`, e);
+        }
       }
     }
   }
