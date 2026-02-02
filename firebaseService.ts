@@ -6,8 +6,6 @@ import {
   onSnapshot, 
   setDoc,
   updateDoc,
-  deleteField,
-  getDoc,
   Firestore
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signInAnonymously, onAuthStateChanged, Auth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
@@ -24,16 +22,14 @@ const firebaseConfig = {
 };
 
 const DEFAULT_TRIP_ID = 'trip_2025_nordic_master';
-const LOCAL_STORAGE_KEY = 'nordic_trip_mock_data';
 
-// --- 改進的 Mock Logic：增加 LocalStorage 持久化 ---
+// --- 純記憶體 Mock Logic：移除 localStorage ---
 const mockDb = {
-  data: JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') as Record<string, any>,
+  data: {} as Record<string, any>,
   listeners: [] as Array<{field: string, callback: (data: any) => void}>,
   
   save: (field: string, value: any) => {
     mockDb.data[field] = value;
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mockDb.data));
     window.dispatchEvent(new CustomEvent('nordic_data_update', { detail: { field, value } }));
   }
 };
@@ -85,7 +81,7 @@ export const dbService = {
         }
       });
     } else {
-      // 模擬環境：初次訂閱時回傳已存儲的資料
+      // 記憶體模式：立即回傳
       setTimeout(() => {
         if (mockDb.data[field] !== undefined) {
           callback(mockDb.data[field]);
@@ -105,13 +101,12 @@ export const dbService = {
     if (useFirebase && db) {
       const tripRef = doc(db, "trips", DEFAULT_TRIP_ID);
       try {
-        // 使用 updateDoc(ref, field, value) 語法，這會直接替換整個欄位的值（如整個 schedule 物件）
-        // 而不是合併物件內部的 Key
-        await updateDoc(tripRef, field, value);
+        // 使用物件對映格式確保穩定寫入
+        await updateDoc(tripRef, { [field]: value });
       } catch (e: any) {
         if (e.code === 'not-found') {
-          // 如果文件完全不存在，才使用 setDoc 建立
-          await setDoc(tripRef, { [field]: value });
+          // 若文件不存在，使用 merge 模式建立，避免覆蓋其他功能已產生的欄位
+          await setDoc(tripRef, { [field]: value }, { merge: true });
         } else {
           console.error(`Firebase write error for ${field}:`, e);
         }
