@@ -58,7 +58,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
         setFullSchedule(data);
       } else if (data === undefined) {
         setFullSchedule({});
-        dbService.updateField('schedule', {});
       }
     });
 
@@ -438,8 +437,26 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ isEditMode, onToggleLock })
               <div key={date} className="bg-white p-4 rounded-[2rem] border-2 border-paper flex items-center justify-between shadow-sm hover:border-harbor/50 transition-all">
                 {dateToEdit === date ? (
                   <div className="flex gap-2 w-full items-center min-w-0">
-                    <input type="date" defaultValue={date} onChange={(e) => setDateRenameInput(e.target.value)} className="flex-1 max-w-[160px] h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
-                    <button onClick={() => { if (!dateRenameInput || fullSchedule[dateRenameInput]) { setDateToEdit(null); return; } const next = { ...fullSchedule }; next[dateRenameInput] = next[date]; delete next[date]; updateScheduleCloud(next); setDateToEdit(null); }} className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"><i className="fa-solid fa-check text-sm"></i></button>
+                    <input type="date" value={dateRenameInput} onChange={(e) => setDateRenameInput(e.target.value)} className="w-full h-[56px] p-3 bg-cream border-2 border-paper rounded-2xl font-bold text-ink text-xs outline-none" />
+                    <button 
+                      onClick={() => { 
+                        if (!dateRenameInput) { setDateToEdit(null); return; }
+                        // 如果日期沒變，直接退出
+                        if (dateRenameInput === date) { setDateToEdit(null); return; }
+                        // 如果目標日期已存在，提示不可修改
+                        if (fullSchedule[dateRenameInput]) { alert("該日期已存在"); return; }
+                        
+                        // 建立全新複本並重新分配
+                        const next = { ...fullSchedule }; 
+                        next[dateRenameInput] = { ...next[date] }; 
+                        delete next[date]; 
+                        updateScheduleCloud(next); 
+                        setDateToEdit(null); 
+                      }} 
+                      className="w-11 h-11 bg-ink text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90"
+                    >
+                      <i className="fa-solid fa-check text-sm"></i>
+                    </button>
                   </div>
                 ) : (
                   <><div className="flex flex-col pl-2"><span className="text-base font-bold text-ink tracking-tight">{date}</span><span className="text-[10px] text-earth-dark font-bold uppercase mt-0.5 opacity-70">{(fullSchedule[date]?.items?.length || 0)} 項目</span></div><div className="flex gap-2"><button onClick={() => { setDateToEdit(date); setDateRenameInput(date); }} className="w-11 h-11 rounded-xl bg-paper/40 text-ink flex items-center justify-center shadow-sm"><i className="fa-solid fa-pen text-xs"></i></button><button onClick={() => { if (dates.length > 1) { const next = { ...fullSchedule }; delete next[date]; updateScheduleCloud(next); } }} className="w-11 h-11 rounded-xl bg-stamp/10 text-stamp flex items-center justify-center shadow-sm"><i className="fa-solid fa-trash-can text-xs"></i></button></div></>
