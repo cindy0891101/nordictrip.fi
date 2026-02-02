@@ -124,5 +124,10 @@
 <body class="overflow-x-hidden font-extralight">
     <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
+    <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+</script>
 </body>
 </html>
